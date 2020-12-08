@@ -3,6 +3,7 @@
 params.genome                = false          /*genome fasta file, must specify complete path. Required parameters*/
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
 params.outputDir             = false          /*output folder, must specify complete path. Required parameters*/
+params.singleEnd             = false
 
 readPrepPath                 = "${params.outputDir}/read_prep"
 trimPath                     = "${params.outputDir}/trimmed"
@@ -20,7 +21,7 @@ params.samtoolsMod           = 'SAMtools/1.10-IGB-gcc-8.2.0'
 genome_file                  = file(params.genome)
 genomeStore                  = genome_file.getParent()
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
-CRAM_Ch1 = Channel.fromPath("${params.samplePath}")
+CRAM_Ch1 = Channel.fromFilePairs("${params.samplePath}", size: 1)
 
 /*
 
@@ -102,69 +103,81 @@ process prepare_genome{
 
 */
 
-process extract_both_unmapped {
+process extract_unmapped {
     tag                    { name }
     executor               myExecutor
-    clusterOptions         params.clusterAcct 
-    cpus                   defaultCPU
+    cpus                   4
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 params.samtoolsMod
     publishDir             'extracted', mode: "copy"	    
     validExitStatus        0,1
     errorStrategy          'finish'
-    scratch                '/scratch'
-    stageOutMode           'copy'
+    //scratch                '/scratch'
+    //stageOutMode           'copy'
     
     input:
-    set val(name), file(CRAM) from CRAM_Ch1	
+    set val(id), file(cram) from CRAM_Ch1	
     file genome from genome_file
     file index from genome_index_ch
 
     output:
-    set val(name), file('*.both-unmapped.fastq') optional true into fq_paired_ch
-    set val(name), file('*.SE-unmapped.fastq') optional true into fq_se_ch
-    file '*'
+    set val(id), file("${id}.R{1,2}.unmapped.fastq") optional true into fq_pe_ch
+    set val(id), file("${id}.orphans.unmapped.fastq") optional true into fq_se_ch
+    file "${id}.improper.bam" optional true // all improper pairs; we save this for now, might be useful later
+    set val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
     
     script:
-    if(params.singleEnd){
+    if(params.singleEnd) {
+    
     """
     # we only need to extract reads that are unmapped, no worries about pairing
-    samtools view -@ ${defaultCPU} -hbt ${index} -f 4 ${name} > ${name.baseName}.unmap.bam
-    samtools fastq -@ ${defaultCPU} -f 4 ${name.baseName}.unmap.bam > ${name.baseName}_SE_R1.fastq
+    samtools view -@ ${defaultCPU} -hbt ${index} -f 4 -o ${id}.unmapped.bam ${cram} 
+    
+    # convert to FASTQ
+    samtools fastq -@ ${defaultCPU} ${id}.SE.unmapped.bam > ${id}.orphans.unmapped.fastq
     """
+    
     } else {
+    
     """
     # two stages; grab any non-properly paired reads (includes unmapped)
-    samtools view -@ ${task.cpus} -hbt ${index} -G 2 -o ${name.baseName}.improper.bam ${name}
+    samtools view -@ ${task.cpus} -hbt ${index} -G 2 -o ${id}.improper.bam ${cram}
     
     # now capture the three classes; this is much faster than parsing the full BAM each time
     
     # both unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 12 -F 256 -o ${name.baseName}.both-unmapped.bam ${name.baseName}.improper.bam
+        -f 12 -F 256 -o ${id}.both-unmapped.bam ${id}.improper.bam
 
-    samtools fastq-@ ${task.cpus} ${name.baseName}.both-unmapped.bam \\
-        -1 ${name.baseName}_PE_R1-both-unmapped.fastq -2 ${name.baseName}_PE_R2-both-unmapped.fastq
+    samtools fastq -@ ${task.cpus} ${id}.both-unmapped.bam \\
+        -1 ${id}.R1.unmapped.fastq -2 ${id}.R2.unmapped.fastq
         
-    # R1 unmapped
+    # R1 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 4 -F 264 -o ${name.baseName}.R1-unmapped.bam ${name.baseName}.improper.bam
+        -f 4 -F 264 -o ${id}.R1-unmapped.bam ${id}.improper.bam
 
-    samtools fastq -@ ${task.cpus} ${name.baseName}.R1-unmapped.bam \\
-        -1 ${name.baseName}_PE_R1-unmapped.fastq -2 ${name.baseName}_PE_R2-mapped.fastq
+    samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
+        -1 ${id}.PE-R1-unmapped.fastq -2 ${id}.PE-R2-mapped.fastq
 
-    # R2 unmapped    
+    # R2 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 8 -F 260 -o ${name.baseName}.R2-unmapped.bam ${name.baseName}.improper.bam
+        -f 8 -F 260 -o ${id}.R2-unmapped.bam ${id}.improper.bam
         
-    samtools fastq -@ ${task.cpus} ${name.baseName}.R1-unmapped.bam \\
-        -1 ${name.baseName}_PE_R1-mapped.fastq -2 ${name.baseName}_PE_R2-unmapped.fastq
+    samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
+        -1 ${id}-PE-R1-mapped.fastq -2 ${id}-PE-R2-unmapped.fastq
+    
+    # combine unmapped BAM files for later analysis
+    samtools merge -@ ${task.cpus} ${id}.unmapped.bam ${id}.both-unmapped.bam ${id}.R1-unmapped.bam ${id}.R2-unmapped.bam
     
     # combined SE unmapped FASTQ into one file for assembly
+    cat ${id}-PE-R1-unmapped.fastq ${id}-PE-R2-unmapped.fastq >> ${id}.orphans.unmapped.fastq
     
-    cat ${name.baseName}_PE_R1-unmapped.fastq ${name.baseName}_PE_R2-unmapped.fastq >> ${name.baseName}_SE-unmapped.fastq
-    """    
+    # we could combine the mapped reads here, but we'll use the original BAM instead
+    ## cat ${id}-PE-R1-mapped.fastq ${id}-PE-R2-mapped.fastq >> ${id}.orphans.mapped.fastq
+    
+    """
+    
     }
 
 }
