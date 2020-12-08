@@ -3,10 +3,7 @@
 params.genome                = false          /*genome fasta file, must specify complete path. Required parameters*/
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
 params.outputDir             = false          /*output folder, must specify complete path. Required parameters*/
-<<<<<<< HEAD
 params.singleEnd             = false
-=======
->>>>>>> add revamped extract reads step
 
 readPrepPath                 = "${params.outputDir}/read_prep"
 trimPath                     = "${params.outputDir}/trimmed"
@@ -24,11 +21,7 @@ params.samtoolsMod           = 'SAMtools/1.10-IGB-gcc-8.2.0'
 genome_file                  = file(params.genome)
 genomeStore                  = genome_file.getParent()
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
-<<<<<<< HEAD
 CRAM_Ch1 = Channel.fromFilePairs("${params.samplePath}", size: 1)
-=======
-CRAM_Ch1 = Channel.fromPath("${params.samplePath}")
->>>>>>> add revamped extract reads step
 
 /*
 
@@ -84,7 +77,6 @@ process prepare_genome{
    
    # both unmapped; -f means unmapped, 
    # bit flag 12  = both reads unmapped (bit flag 4 & 8)
-<<<<<<< HEAD
    # bit flag 2304 = not primary alignment (this removes these), not supplemental
    samtools view -hb -f 12 -F 2304 alignments.bam > both_unmapped.bam
     
@@ -101,24 +93,6 @@ process prepare_genome{
    #                Note this is to make sure we're not keeping reads *also* in the first  
    #                set
    samtools view -hb -f 8 -F 2308 alignments.bam  > R2_unmapped.bam
-=======
-   # bit flag 256 = not primary alignment (this removes these)
-   samtools view -hb -f 12 -F 256 alignments.bam > both_unmapped.bam
-    
-   # R1 mapped, R2 not
-   # bit flag 4   = R1 unmapped
-   # bit flag 264 = Mate unmapped and not primary alignment (removes these). 
-   #                Note this is to make sure we're not keeping reads *also* in the first  
-   #                set
-   samtools view -hb -f 4 -F264 alignments.bam  > R1_unmapped.bam
-   
-   # R2 mapped, R1 not
-   # bit flag 8   = R2 (mate) unmapped
-   # bit flag 260 = R1 (read) unmapped and not primary alignment (removes these). 
-   #                Note this is to make sure we're not keeping reads *also* in the first  
-   #                set
-   samtools view -hb -f 8 -F 260 alignments.bam  > R2_unmapped.bam
->>>>>>> add revamped extract reads step
 
 */
 
@@ -203,6 +177,7 @@ process extract_unmapped {
     ## cat ${id}-PE-R1-mapped.fastq ${id}-PE-R2-mapped.fastq >> ${id}.orphans.mapped.fastq
     
     """
+    
     }
 
 }
