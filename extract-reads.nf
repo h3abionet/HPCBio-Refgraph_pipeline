@@ -77,22 +77,22 @@ process prepare_genome{
    
    # both unmapped; -f means unmapped, 
    # bit flag 12  = both reads unmapped (bit flag 4 & 8)
-   # bit flag 256 = not primary alignment (this removes these)
-   samtools view -hb -f 12 -F 256 alignments.bam > both_unmapped.bam
+   # bit flag 2304 = not primary alignment (this removes these), not supplemental
+   samtools view -hb -f 12 -F 2304 alignments.bam > both_unmapped.bam
     
    # R1 mapped, R2 not
    # bit flag 4   = R1 unmapped
-   # bit flag 264 = Mate unmapped and not primary alignment (removes these). 
+   # bit flag 2312 = Mate unmapped and not primary alignment (removes these), not supplemental
    #                Note this is to make sure we're not keeping reads *also* in the first  
    #                set
-   samtools view -hb -f 4 -F264 alignments.bam  > R1_unmapped.bam
+   samtools view -hb -f 4 -F 2312 alignments.bam  > R1_unmapped.bam
    
    # R2 mapped, R1 not
-   # bit flag 8   = R2 (mate) unmapped
-   # bit flag 260 = R1 (read) unmapped and not primary alignment (removes these). 
+   # bit flag 8    = R2 (mate) unmapped
+   # bit flag 2308 = R1 (read) unmapped and not primary alignment (removes these), not supplemental
    #                Note this is to make sure we're not keeping reads *also* in the first  
    #                set
-   samtools view -hb -f 8 -F 260 alignments.bam  > R2_unmapped.bam
+   samtools view -hb -f 8 -F 2308 alignments.bam  > R2_unmapped.bam
 
 */
 
@@ -148,21 +148,21 @@ process extract_unmapped {
     
     # both unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 12 -F 256 -o ${id}.both-unmapped.bam ${id}.improper.bam
+        -f 12 -F 2304 -o ${id}.both-unmapped.bam ${id}.improper.bam
 
     samtools fastq -@ ${task.cpus} ${id}.both-unmapped.bam \\
         -1 ${id}.R1.unmapped.fastq -2 ${id}.R2.unmapped.fastq
         
     # R1 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 4 -F 264 -o ${id}.R1-unmapped.bam ${id}.improper.bam
+        -f 4 -F 2312 -o ${id}.R1-unmapped.bam ${id}.improper.bam
 
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
         -1 ${id}.PE-R1-unmapped.fastq -2 ${id}.PE-R2-mapped.fastq
 
     # R2 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 8 -F 260 -o ${id}.R2-unmapped.bam ${id}.improper.bam
+        -f 8 -F 2308 -o ${id}.R2-unmapped.bam ${id}.improper.bam
         
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
         -1 ${id}-PE-R1-mapped.fastq -2 ${id}-PE-R2-unmapped.fastq
