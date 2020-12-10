@@ -113,8 +113,8 @@ process extract_unmapped {
     publishDir             'extracted', mode: "copy"	    
     validExitStatus        0,1
     errorStrategy          'finish'
-    //scratch                '/scratch'
-    //stageOutMode           'copy'
+    scratch                '/scratch'
+    stageOutMode           'copy'
     
     input:
     set val(id), file(cram) from CRAM_Ch1	
