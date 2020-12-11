@@ -110,7 +110,7 @@ process extract_unmapped {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 params.samtoolsMod
-    publishDir             'extracted', mode: "copy"	    
+    publishDir             readPrepPath, mode: "copy"
     validExitStatus        0,1
     errorStrategy          'finish'
     scratch                '/scratch'
@@ -122,7 +122,7 @@ process extract_unmapped {
     file index from genome_index_ch
 
     output:
-    set val(id), file("${id}.R{1,2}.unmapped.fastq") optional true into fq_pe_ch
+    set val(id), file("${id}.both-unmapped.R{1,2}.fastq") optional true into fq_pe_ch
     set val(id), file("${id}.orphans.unmapped.fastq") optional true into fq_se_ch
     file "${id}.improper.bam" optional true // all improper pairs; we save this for now, might be useful later
     set val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
@@ -131,6 +131,7 @@ process extract_unmapped {
     if(params.singleEnd) {
     
     """
+    # TODO: UNTESTED!!!!
     # we only need to extract reads that are unmapped, no worries about pairing
     samtools view -@ ${defaultCPU} -hbt ${index} -f 4 -o ${id}.unmapped.bam ${cram} 
     
@@ -151,30 +152,30 @@ process extract_unmapped {
         -f 12 -F 2304 -o ${id}.both-unmapped.bam ${id}.improper.bam
 
     samtools fastq -@ ${task.cpus} ${id}.both-unmapped.bam \\
-        -1 ${id}.R1.unmapped.fastq -2 ${id}.R2.unmapped.fastq
+        -1 ${id}.both-unmapped.R1.fastq -2 ${id}.both-unmapped.R2.fastq
         
     # R1 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
         -f 4 -F 2312 -o ${id}.R1-unmapped.bam ${id}.improper.bam
 
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
-        -1 ${id}.PE-R1-unmapped.fastq -2 ${id}.PE-R2-mapped.fastq
+        -1 ${id}.R1-unmapped.R1.fastq -2 ${id}.R1-unmapped.R2.fastq
 
     # R2 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
         -f 8 -F 2308 -o ${id}.R2-unmapped.bam ${id}.improper.bam
         
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
-        -1 ${id}-PE-R1-mapped.fastq -2 ${id}-PE-R2-unmapped.fastq
+        -1 ${id}.R2-unmapped.R1.fastq -2 ${id}.R2-unmapped.R2.fastq
     
     # combine unmapped BAM files for later analysis
     samtools merge -@ ${task.cpus} ${id}.unmapped.bam ${id}.both-unmapped.bam ${id}.R1-unmapped.bam ${id}.R2-unmapped.bam
     
     # combined SE unmapped FASTQ into one file for assembly
-    cat ${id}-PE-R1-unmapped.fastq ${id}-PE-R2-unmapped.fastq >> ${id}.orphans.unmapped.fastq
+    cat ${id}.R1-unmapped.R1.fastq ${id}.R2-unmapped.R2.fastq >> ${id}.orphans.unmapped.fastq
     
     # we could combine the mapped reads here, but we'll use the original BAM instead
-    ## cat ${id}-PE-R1-mapped.fastq ${id}-PE-R2-mapped.fastq >> ${id}.orphans.mapped.fastq
+    ## cat ${id}.R1-unmapped.R2.fastq ${id}.R2-unmapped.R1.fastq >> ${id}.orphans.mapped.fastq
     
     """
     
