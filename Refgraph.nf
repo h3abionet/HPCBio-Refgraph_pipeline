@@ -133,7 +133,7 @@ process extract_unmap {
     stageOutMode           'copy'
     
     input:
-    set val(name), file(okcram) from extract_ch	
+    set val(name), file(CRAM) from CRAM_Ch1	
     file genome from genome_file
     file index from genome_index_ch
 
