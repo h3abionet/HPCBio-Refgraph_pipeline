@@ -132,5 +132,4 @@ text goes here
 * Yuan Tian
 * Gloria Rendon
 * Chris Fields
-* **ADD YOUR NAME HERE**
-Kim Walden
+* Kim Walden
