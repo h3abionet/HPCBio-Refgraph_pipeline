@@ -42,6 +42,7 @@ params.samtoolsMod           = 'SAMtools/1.10-IGB-gcc-8.2.0'
 params.megahitMod            = 'MEGAHIT/1.2.9-IGB-gcc-8.2.0'
 params.assemblathon          = "/home/groups/hpcbio/apps/FAlite/assemblathon_stats.pl"
 params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
+params.BBMapMod              = "BBMap/38.36-Java-1.8.0_152"
 
 /*Prepare input*/
 genome_file                  = file(params.genome)
@@ -350,7 +351,7 @@ process megahit_assemble {
     cpus                   assemblerCPU
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    module                 params.megahitMod 
+    module                 params.megahitMod,params.BBMapMod  
     publishDir             megahitPath , mode:'copy'
     validExitStatus        0,1
     errorStrategy          'finish'
@@ -364,7 +365,7 @@ process megahit_assemble {
     set val(name2), file(orphans) from trim_orphan_ch
 
     output:
-    set val(name), file('*.stats') optional true into metrics_ch
+    set val(name), file('*.stats.json') optional true into metrics_ch
     file '*'
 
     script:
@@ -382,7 +383,7 @@ process megahit_assemble {
 
     # megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]}  -o ${name}.megahit_results
 
-    perl $params.assemblathon ${name}.megahit_results/final.contigs.fa > ${name}.final.contigs.fa.stats
+    stats.sh in=${name}.megahit_results/final.contigs.fa format=8 > ${name}.final.contigs.fa.stats.json
 
     """
     }
@@ -426,7 +427,7 @@ process MultiQC_readPrep {
     """
     multiqc .
     """
-} 
+}
 
 process Assembly_metrics {
     executor               myExecutor
@@ -443,7 +444,7 @@ process Assembly_metrics {
     file "*"
 
     """
-    cat *.stats > assembly_metrics.txt
+    cat *.stats.json > assembly_metrics.json
     """
 } 
 
