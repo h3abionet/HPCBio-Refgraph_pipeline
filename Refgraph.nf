@@ -351,7 +351,7 @@ process megahit_assemble {
     cpus                   assemblerCPU
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    module                 params.megahitMod,params.BBMapMod  
+    module                 params.megahitMod  
     publishDir             megahitPath , mode:'copy'
     validExitStatus        0,1
     errorStrategy          'finish'
@@ -365,7 +365,7 @@ process megahit_assemble {
     set val(name2), file(orphans) from trim_orphan_ch
 
     output:
-    set val(name), file('*.stats.json') optional true into metrics_ch
+    set val(name), file('*.final.contigs.fa') optional true into assembly_metrics_ch
     file '*'
 
     script:
@@ -373,7 +373,7 @@ process megahit_assemble {
     """
     megahit -1 ${fastqs[0]} -o ${name}.megahit_results
     
-    perl $params.assemblathon ${name}.megahit_results/final.contigs.fa > ${name}.megahit_results/final.contigs.fa.stats
+    cp ${name}.megahit_results/final.contigs.fa ${name}.megahit.final.contigs.fa
     """
     } else {
     """
@@ -383,7 +383,7 @@ process megahit_assemble {
 
     # megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]}  -o ${name}.megahit_results
 
-    stats.sh in=${name}.megahit_results/final.contigs.fa format=8 > ${name}.final.contigs.fa.stats.json
+    cp ${name}.megahit_results/final.contigs.fa ${name}.megahit.final.contigs.fa
 
     """
     }
@@ -429,6 +429,32 @@ process MultiQC_readPrep {
     """
 }
 
+process Assembly_QC {
+    executor               myExecutor
+    cpus                   2
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    module                 params.BBMapMod
+    publishDir             metricsPath, mode: 'copy', overwrite: true
+    
+    input:
+    set val(name), file(contigs) from assembly_metrics_ch
+
+    output:
+    set val(name), file('*.json') optional true into metrics_ch
+
+    """
+    stats.sh in=${contigs} format=8 > ${name}.stats.json
+
+    """
+
+}
+
+/*
+
+  Need to convert json into table since MultiQC cannot parse it yet
+
+*/
 process Assembly_metrics {
     executor               myExecutor
     cpus                   2
@@ -444,7 +470,7 @@ process Assembly_metrics {
     file "*"
 
     """
-    cat *.stats.json > assembly_metrics.json
+    cat *.json > assembly_metrics.json
     """
 } 
 
