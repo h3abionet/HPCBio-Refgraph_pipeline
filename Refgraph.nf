@@ -1,5 +1,72 @@
 #!/usr/bin/env nextflow
 
+params.version = '1.01'
+
+def helpMessage() {
+log.info"""
+===================================
+$HPCBio-Refgraph_pipeline  ~  version ${params.version}
+===================================
+Usage:
+
+Nextflow pipeline to perform de-novo assembly with unmapped reads of human datasets. 
+This pipeline was adapted from the work published by
+
+
+Sherman RM, Forman et al.
+Assembly of a pan-genome from deep sequencing of 910 humans of African descent. 
+Nat Genet. 2019 Jan;51(1):30-35. 
+doi: 10.1038/s41588-018-0273-y. 
+Epub 2018 Nov 19. Erratum in: Nat Genet. 2019 Feb;51(2):364. 
+PMID: 30455414; PMCID: PMC6309586.
+
+
+This pipeline can be run specifying parameters in a config file or with command line flags.
+The typical example for running the pipeline with command line flags is as follows:
+
+nextflow run Refgraph.nf --genome 'data/genomes/human/grch38.fasta' --samplePath 'data/inputs/*.cram'  --outputDir 'results/test-refgraph' --email 'me@domain.com'
+
+The typical command for running the pipeline with your own config (instead of command line flags) is as follows:
+
+nextflow run Refgraph.nf  -c user_input.config
+
+where:
+user_input.config is the configuration file (see example 'conf/1000genome_LWK_20Samples.conf')
+
+
+To override existing values from the command line, please type these parameters:
+
+Mandatory arguments:
+
+--genome                fasta file of reference genome. Must specify complete path. Required parameter
+--samplePath            input folder, must specify complete path. Required parameter
+--outputDir             output folder, must specify complete path. Required parameters
+--singleEnd             options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false
+--assembler             options: megahit|masurca. Default is megahit
+
+Costumize analyses:
+--skipKraken2           run the kraken2 step. options: true|false. Default is true which means that the kraken2 step will be skipped
+--skipTrim              qc-trimming of reads. options: true|false. Default is false     
+
+Trimming options:
+--min_read_length       minimum length of read to be kept after trimming for downstream analysis. Default is 20
+--min_base_quality      minimum base quality. Default is 20
+--guess_adapter         auto-detect adapter from input file. options: true|false. Default is true
+--forward_adapter       adapter sequence to be clipped off (forward).
+--reverse_adapter       adapter sequence to be clipped off (reverse). Used for paired reads only.
+
+Help:
+--help                        Will print out summary above when executing nextflow run uct-cbio/16S-rDNA-dada2-pipeline
+    """.stripIndent()
+}
+
+// Show help message
+params.help = false
+if (params.help){
+    helpMessage()
+    exit 0
+}
+
 /*parameters that are specified at the command line or via config file*/
 params.genome                = false          /*genome fasta file, must specify complete path. Required parameters*/
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
@@ -7,6 +74,7 @@ params.outputDir             = false          /*output folder, must specify comp
 params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
 params.assembler             = 'megahit'      /*options: megahit|masurca. Default is megahit*/
 params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
+params.email                 = false          /*email of recipient of execution notification messages*/
 
 /* parameters for readprep = qctrimming and adapter removal */
 params.skipTrim              = false           /*qc-trimming of reads. options: true|false. Default is false*/     
@@ -49,6 +117,42 @@ genome_file                  = file(params.genome)
 genomeStore                  = genome_file.getParent()
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
 CRAM_Ch1 = Channel.fromFilePairs("${params.samplePath}", size: 1)
+
+
+// Header log info
+log.info "==================================="
+log.info " HPCBio-Refgraph_pipeline  ~  version ${params.version}"
+log.info "==================================="
+def summary = [:]
+
+summary['BBTols']         = params.BBMapMod
+summary['fastp']          = params.fastpMod
+summary['megahit']        = params.megahitMod
+summary['multiqc']        = params.multiqcMod
+summary['perl']           = params.perlMod
+summary['samtools']       = params.samtoolsMod
+
+summary['Genome']         = params.genome
+summary['Assembly tool']  = params.assembler
+summary['Outputdir']      = params.outputDir
+summary['Reads']          = params.samplePath
+summary['Sigle Reads']    = params.singleEnd
+summary['skip kraken2']   = params.skipKraken2
+
+summary['skip trimQC']    = params.skipTrim
+if(!params.skipTrim) {
+	summary['min read length']  = params.min_read_length
+	summary['min base quality'] = params.min_base_quality	
+	summary['guess adaptors']   = params.guess_adapter
+	if(!params.guess_adapter) {
+	summary['Forward primer']   = params.forward_adapter
+	summary['Reverse primer']   = params.reverse_adapter
+	}
+}
+
+log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
+log.info "========================================="
+
 
 /*
 
@@ -474,3 +578,24 @@ process Assembly_metrics {
     """
 } 
 
+/*
+ * Completion e-mail notification
+ */
+
+workflow.onComplete {
+
+finalLog = """
+
+=========================================
+* Command line : ${workflow.commandLine}
+* Completed at : ${workflow.complete}
+* Duration     : ${workflow.duration}
+* workDir      : ${workflow.workDir}
+* exit status  : ${workflow.exitStatus}
+=========================================
+ 
+"""
+
+println summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
+
+}
