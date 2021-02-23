@@ -5,7 +5,7 @@ params.version = '1.01'
 def helpMessage() {
 log.info"""
 ===================================
-$HPCBio-Refgraph_pipeline  ~  version ${params.version}
+HPCBio-Refgraph_pipeline  ~  version ${params.version}
 ===================================
 Usage:
 
