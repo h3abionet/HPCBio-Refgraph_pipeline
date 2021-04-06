@@ -91,7 +91,7 @@ trimPath                     = "${params.outputDir}/trimmed"
 megahitPath                  = "${params.outputDir}/megahit"
 masurcaPath                  = "${params.outputDir}/masurca"
 kraken2Path                  = "${params.outputDir}/kraken2"
-multiqcPath                  = "${params.outputDir}/read_QC"
+multiqcPath                  = "${params.outputDir}/multiqc"
 metricsPath                  = "${params.outputDir}/assembly_metrics"
 
 /*cluster parameters */
@@ -111,7 +111,6 @@ params.megahitMod            = 'MEGAHIT/1.2.9-IGB-gcc-8.2.0'
 params.assemblathon          = "/home/groups/hpcbio/apps/FAlite/assemblathon_stats.pl"
 params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
 params.BBMapMod              = "BBMap/38.36-Java-1.8.0_152"
-params.seqkitMod             = "seqkit/0.12.1"
 
 /*Prepare input*/
 genome_file                  = file(params.genome)
@@ -293,7 +292,6 @@ process extract_unmapped {
     output:
     set val(id), file("${id}.both-unmapped.R{1,2}.fastq") optional true into fq_pe_ch
     set val(id), file("${id}.orphans.unmapped.fastq") optional true into fq_se_ch
-    set val(id), file("${id}*fastq") optional true into QC_unmapped_ch
     file "${id}.improper.bam" optional true // all improper pairs; we save this for now, might be useful later
     set val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
     
@@ -379,7 +377,6 @@ process trimming {
     
     output:
     set val(name), file('*.PE.R{1,2}.trimmed.fq'), file('*.unpR{1,2}.trimmed.fq') optional true into trim_pe_ch
-    set val(name), file("${name}*fq") optional true into  QC_trimmed_ch
     set val(name), file('*.json') optional true into multiqc_pe_ch
     file '*'
 	    
@@ -415,7 +412,6 @@ process trimming_orphans {
     
     output:
     set val(name), file('*.orphans.trimmed.fq') optional true into trim_orphan_ch
-    set val(name), file('*.fq') optional true into QC_trim_orphan_ch
     set val(name), file('*.json') optional true into multiqc_orphan_ch
     file '*'
 	    
@@ -534,31 +530,6 @@ process MultiQC_readPrep {
 
     """
     multiqc .
-    """
-}
-process seqkitQC_readPrep {
-    executor               myExecutor
-    clusterOptions         params.clusterAcct 
-    cpus                   2
-    queue                  params.myQueue
-    memory                 "$defaultMemory GB"
-    module                 params.seqkitMod
-    publishDir             multiqcPath, mode: 'copy', overwrite: true
- 
-    input:
-    file('*') from QC_trimmed_ch.collect()
-    file('*') from QC_trim_orphan_ch.collect()
-    file('*') from QC_unmapped_ch.collect()
-
-    
-    output:
-    file "read_fate.tsv"
-
-    """
-    seqkit stats input* -b -T >> read_fate1.tsv
-    seqkit stats *q -b -T >> read_fate2.tsv
-    sed -i '1d' read_fate2.tsv
-    cat read_fate1.tsv read_fate2.tsv >> read_fate.tsv
     """
 }
 
