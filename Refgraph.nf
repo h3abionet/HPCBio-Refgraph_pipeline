@@ -73,7 +73,7 @@ params.samplePath            = false          /*input folder, must specify compl
 params.outputDir             = false          /*output folder, must specify complete path. Required parameters*/
 params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
 params.assembler             = 'megahit'      /*options: megahit|masurca. Default is megahit*/
-params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
+params.skipKraken2           = false          /*options: true|false. Default is true which means that kraken2 will be skipped*/
 params.email                 = false          /*email of recipient of execution notification messages*/
 
 /* parameters for readprep = qctrimming and adapter removal */
@@ -101,7 +101,7 @@ defaultCPU                   = '1'
 defaultMemory                = '20'
 assemblerCPU                 = '12'
 assemblerMemory              = '100'
-// params.clusterAcct           = " -A h3bionet "
+params.clusterAcct           = " -A h3bionet "
 
 /*software stack*/
 params.perlMod               = 'Perl/5.24.1-IGB-gcc-4.9.4'
@@ -112,6 +112,8 @@ params.assemblathon          = "/home/groups/hpcbio/apps/FAlite/assemblathon_sta
 params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
 params.BBMapMod              = "BBMap/38.36-Java-1.8.0_152"
 params.seqkitMod             = "seqkit/0.12.1"
+params.krakenMod             = "Kraken2/2.0.8-beta-IGB-gcc-4.9.4"
+params.krakenDBpath          = "/home/groups/h3abionet/RefGraph/data/kraken2/"
 
 /*Prepare input*/
 genome_file                  = file(params.genome)
@@ -273,7 +275,7 @@ process qc_input {
 */
 
 process extract_unmapped {
-    tag                    { name }
+    tag                    { id }
     executor               myExecutor
     cpus                   4
     queue                  params.myQueue
@@ -293,7 +295,6 @@ process extract_unmapped {
     output:
     set val(id), file("${id}.both-unmapped.R{1,2}.fastq") optional true into fq_pe_ch
     set val(id), file("${id}.orphans.unmapped.fastq") optional true into fq_se_ch
-    set val(id), file("${id}*fastq") optional true into QC_unmapped_ch
     file "${id}.improper.bam" optional true // all improper pairs; we save this for now, might be useful later
     set val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
     
@@ -379,7 +380,7 @@ process trimming {
     
     output:
     set val(name), file('*.PE.R{1,2}.trimmed.fq'), file('*.unpR{1,2}.trimmed.fq') optional true into trim_pe_ch
-    set val(name), file("${name}*fq") optional true into  QC_trimmed_ch
+    set val(name), file("${name}*fq") optional true into  QC_trimmed_ch mode flatten
     set val(name), file('*.json') optional true into multiqc_pe_ch
     file '*'
 	    
@@ -415,7 +416,6 @@ process trimming_orphans {
     
     output:
     set val(name), file('*.orphans.trimmed.fq') optional true into trim_orphan_ch
-    set val(name), file('*.fq') optional true into QC_trim_orphan_ch
     set val(name), file('*.json') optional true into multiqc_orphan_ch
     file '*'
 	    
@@ -473,7 +473,7 @@ process megahit_assemble {
     set val(name2), file(orphans) from trim_orphan_ch
 
     output:
-    set val(name), file('*.final.contigs.fa') optional true into assembly_metrics_ch
+    set val(name), file('*.final.contigs.fa') optional true into assembly_metrics_ch,kraken2_ch,assembly_qc_ch2
     file '*'
 
     script:
@@ -507,58 +507,44 @@ process megahit_assemble {
 /*
 
   kraken2
-  To be added later
+  
 
 */
 
-/*
-
-  QC all samples
-
-*/
-process MultiQC_readPrep {
+process kraken2 {
+    tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
-    cpus                   2
+    cpus                   assemblerCPU
     queue                  params.myQueue
-    memory                 "$defaultMemory GB"
-    module                 params.multiqcMod
-    publishDir             multiqcPath, mode: 'copy', overwrite: true
- 
-    input:
-    file('*') from multiqc_pe_ch.collect()
-    file('*') from multiqc_orphan_ch.collect()
-
-    output:
-    file "*"
-
-    """
-    multiqc .
-    """
-}
-process seqkitQC_readPrep {
-    executor               myExecutor
-    clusterOptions         params.clusterAcct 
-    cpus                   2
-    queue                  params.myQueue
-    memory                 "$defaultMemory GB"
-    module                 params.seqkitMod
-    publishDir             multiqcPath, mode: 'copy', overwrite: true
- 
-    input:
-    file('*') from QC_trimmed_ch.collect()
-    file('*') from QC_trim_orphan_ch.collect()
-    file('*') from QC_unmapped_ch.collect()
-
+    memory                 "$assemblerMemory GB"
+    module                 params.krakenMod  
+    publishDir             kraken2Path , mode:'copy'
+    validExitStatus        0,1
+    errorStrategy          'finish'
+    scratch                '/scratch'
+    stageOutMode           'copy'
     
-    output:
-    file "read_fate.tsv"
+    input:
+    set val(name), file(contigs) from kraken2_ch
 
-    """
-    seqkit stats input* -b -T >> read_fate1.tsv
-    seqkit stats *q -b -T >> read_fate2.tsv
-    sed -i '1d' read_fate2.tsv
-    cat read_fate1.tsv read_fate2.tsv >> read_fate.tsv
+    output:
+    set val(name), file('*_classified.fasta') optional true into QC_kraken2_ch1
+    set val(name), file('*_unclassified.fasta') optional true into QC_kraken2_ch2
+    file '*'
+
+
+    script:
+    """    
+	export KRAKEN2_DB_PATH=$params.krakenDBpath
+
+	kraken2 --use-names --threads 12 --quick   \
+	--report ${name}_kraken2_report.txt \
+	--classified-out ${name}_kraken2_classified.fasta \
+	--unclassified-out ${name}_kraken2_unclassified.fasta \
+	--db human \
+	${contigs}  > ${name}_kraken2_output.txt
+ 
     """
 }
 
@@ -606,6 +592,55 @@ process Assembly_metrics {
     cat *.json > assembly_metrics.json
     """
 } 
+
+/*
+
+  QC all samples
+
+*/
+process MultiQC_readPrep {
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   2
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    module                 params.multiqcMod
+    publishDir             multiqcPath, mode: 'copy', overwrite: true
+ 
+    input:
+    file('*') from multiqc_pe_ch.collect()
+    file('*') from multiqc_orphan_ch.collect()
+
+    output:
+    file "*"
+
+    """
+    multiqc .
+    """
+}
+
+process Fasta_QC {
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   2
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    module                 params.seqkitMod
+    publishDir             metricsPath, mode: 'copy', overwrite: true
+ 
+    input:
+    file('*') from assembly_qc_ch2.collect()
+    file('*') from QC_kraken2_ch1.collect()
+    file('*') from QC_kraken2_ch2.collect()
+    
+    output:
+    file '*'
+
+
+    """
+    seqkit stats *a -b -T >> FA_read_fate.tsv
+    """
+}
 
 /*
  * Completion e-mail notification
