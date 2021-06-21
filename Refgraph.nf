@@ -542,7 +542,7 @@ process kraken2 {
 	--report ${name}_kraken2_report.txt \
 	--classified-out ${name}_kraken2_classified.fasta \
 	--unclassified-out ${name}_kraken2_unclassified.fasta \
-	--db human \
+	--db pluspf_20200919 \
 	${contigs}  > ${name}_kraken2_output.txt
  
     """
