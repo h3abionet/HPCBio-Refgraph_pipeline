@@ -40,6 +40,7 @@ params.perlMod               = 'Perl/5.24.1-IGB-gcc-4.9.4'
 params.fastpMod              = 'fastp/0.20.0-IGB-gcc-4.9.4'
 params.samtoolsMod           = 'SAMtools/1.10-IGB-gcc-8.2.0'
 params.megahitMod            = 'MEGAHIT/1.2.9-IGB-gcc-8.2.0'
+params.masurcaMod            = 'MaSuRCA/3.4.2-IGB-gcc-8.2.0'
 params.assemblathon          = "/home/groups/hpcbio/apps/FAlite/assemblathon_stats.pl"
 params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
 
@@ -50,10 +51,8 @@ if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_fil
 CRAM_Ch1 = Channel.fromFilePairs("${params.samplePath}", size: 1)
 
 /*
-
   prepare_genome 
   This process is executed only once
-
 */
 
 
@@ -81,10 +80,8 @@ process prepare_genome{
 }
 
 /*
-
   qc_input 
   This process mainly checks the inputs for improperly formed CRAM/BAM input files
-
 */
 
 
@@ -120,7 +117,6 @@ process qc_input {
 
 
 /*
-
    Read extraction.  This step is tricky.
    
    For single end reads, we only need to extract unmapped as there isn't a mapped mate.  
@@ -156,14 +152,11 @@ process qc_input {
    #                Note this is to make sure we're not keeping reads *also* in the first  
    #                set
    samtools view -hb -f 8 -F 2308 alignments.bam  > R2_unmapped.bam
-
 */
 
 /*
-
   extract_unmap 
   The input files are in CRAM format which have been previously aligned to genome prepared in previous step
-
 */
 
 process extract_unmapped {
@@ -220,10 +213,8 @@ process extract_unmapped {
     # R1 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
         -f 4 -F 2312 -o ${id}.R1-unmapped.bam ${id}.improper.bam
-
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
         -1 ${id}.R1-unmapped.R1.fastq -2 ${id}.R1-unmapped.R2.fastq
-
     # R2 only unmapped
     samtools view -@ ${task.cpus} -hbt ${index} \\
         -f 8 -F 2308 -o ${id}.R2-unmapped.bam ${id}.improper.bam
@@ -246,11 +237,8 @@ process extract_unmapped {
 
 }
 
-
 /*
-
   trimming
-
 */
 
 process trimming {
@@ -271,7 +259,7 @@ process trimming {
     set val(name), file(reads) from fq_pe_ch
     
     output:
-    set val(name), file('*.PE.R{1,2}.trimmed.fq'), file('*.unpR{1,2}.trimmed.fq') optional true into trim_pe_ch
+    set val(name), file('*.PE.R{1,2}.trimmed.fq'), file('*.unpR{1,2}.trimmed.fq') optional true into trim_pe_ch, trim_pe_ch2
     set val(name), file('*.json') optional true into multiqc_pe_ch
     file '*'
 	    
@@ -306,7 +294,7 @@ process trimming_orphans {
     set val(name), file(reads) from fq_se_ch
     
     output:
-    set val(name), file('*.orphans.trimmed.fq') optional true into trim_orphan_ch
+    set val(name), file('*.orphans.trimmed.fq') optional true into trim_orphan_ch, trim_orphan_ch2
     set val(name), file('*.json') optional true into multiqc_orphan_ch
     file '*'
 	    
@@ -379,34 +367,84 @@ process megahit_assemble {
     megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]} \\
         -r ${sefastqs[0]},${sefastqs[1]},${orphans} \\
         -o ${name}.megahit_results
-
     # megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]}  -o ${name}.megahit_results
-
     perl $params.assemblathon ${name}.megahit_results/final.contigs.fa > ${name}.final.contigs.fa.stats
-
     """
     }
 }
 
 /*
-
   masurca
-  To be added later
-
 */
 
-/*
+process masurca_assemble {
+    tag                    { name }
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   assemblerCPU
+    queue                  params.myQueue
+    memory                 "$assemblerMemory GB"
+    module                 params.masurcaMod 
+    publishDir             masurcaPath , mode:'copy'
+    validExitStatus        0,1
+    errorStrategy          'finish'
+    scratch                '/scratch'
+    stageOutMode           'copy'
+    
+    // TODO: We need to sanity check that the channels are matched by the initial value (name)
+    // See the join command: https://www.nextflow.io/docs/latest/operator.html?highlight=map#join
+    
+    input:
+    set val(name), file(pefastqs), file(sefastqs) from trim_pe_ch2
+    set val(name2), file(orphans) from trim_orphan_ch2
 
+    output:
+    set val(name), file('*.stats') optional true into metrics_ch
+    file '*'
+
+    script:
+    """
+    
+    touch masurca_config_file.txt
+
+    echo "DATA"                                          >> masurca_config_file.txt
+    echo "PE = pe 150 50 ${pefastqs[0]} ${pefastqs[1]}"  >> masurca_config_file.txt
+    echo "PE = s1 150 50 ${sefastqs[0]}"                 >> masurca_config_file.txt
+    echo "PE = s2 150 50 ${sefastqs[1]}"                 >> masurca_config_file.txt
+    echo "PE = s3 150 50 ${orphans}"                     >> masurca_config_file.txt
+    echo "END"                                           >> masurca_config_file.txt
+
+    echo "PARAMETERS"                        >> masurca_config_file.txt
+    echo "GRAPH_KMER_SIZE = auto"            >> masurca_config_file.txt
+    echo "USE_LINKING_MATES = 1"             >> masurca_config_file.txt
+    echo "LIMIT_JUMP_COVERAGE = 300"         >> masurca_config_file.txt
+    echo "CA_PARAMETERS = cgwErrorRate=0.15" >> masurca_config_file.txt
+    echo "KMER_COUNT_THRESHOLD = 1"          >> masurca_config_file.txt
+    echo "NUM_THREADS = 16"                  >> masurca_config_file.txt
+    echo "JF_SIZE = 200000000"               >> masurca_config_file.txt
+    echo "CLOSE_GAPS=0"                      >> masurca_config_file.txt
+    echo "SOAP_ASSEMBLY=0"                   >> masurca_config_file.txt
+    echo "DO_HOMOPOLYMER_TRIM=0"             >> masurca_config_file.txt
+    echo "END"                               >> masurca_config_file.txt
+
+    masurca masurca_config_file.txt
+
+    ./assemble.sh
+
+    perl $params.assemblathon ./CA/final.genome.scf.fasta > ./CA/final.genome.scf.fasta.stats
+    """
+
+}
+
+/*
   kraken2
   To be added later
-
 */
 
 /*
-
   QC all samples
-
 */
+
 process MultiQC_readPrep {
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -446,4 +484,3 @@ process Assembly_metrics {
     cat *.stats > assembly_metrics.txt
     """
 } 
-
