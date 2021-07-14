@@ -5,7 +5,7 @@ params.genome                = false          /*genome fasta file, must specify 
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
 params.outputDir             = false          /*output folder, must specify complete path. Required parameters*/
 params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
-params.assembler             = 'megahit'      /*options: megahit|masurca. Default is megahit*/
+params.assembler             = 'masurca'      /*options: megahit|masurca. Default is megahit*/
 params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
 
 /* parameters for readprep = qctrimming and adapter removal */
@@ -38,9 +38,10 @@ assemblerMemory              = '100'
 /*software stack*/
 params.perlMod               = 'Perl/5.24.1-IGB-gcc-4.9.4'
 params.fastpMod              = 'fastp/0.20.0-IGB-gcc-4.9.4'
-params.samtoolsMod           = 'SAMtools/1.10-IGB-gcc-8.2.0'
+params.samtoolsMod           = 'SAMtools/1.12-IGB-gcc-8.2.0'
 params.megahitMod            = 'MEGAHIT/1.2.9-IGB-gcc-8.2.0'
 params.masurcaMod            = 'MaSuRCA/3.4.2-IGB-gcc-8.2.0'
+params.pysamMod              = 'Python/3.7.2-IGB-gcc-8.2.0'
 params.assemblathon          = "/home/groups/hpcbio/apps/FAlite/assemblathon_stats.pl"
 params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
 
@@ -48,13 +49,14 @@ params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
 genome_file                  = file(params.genome)
 genomeStore                  = genome_file.getParent()
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
+if( !params.assembler != "megahit" || !params.assembler != "masurca" ) exit 1, "Unknown assembler: ${params.assembler}"
+
 CRAM_Ch1 = Channel.fromFilePairs("${params.samplePath}", size: 1)
 
 /*
   prepare_genome 
   This process is executed only once
 */
-
 
 process prepare_genome{
     tag                    { genome }
@@ -84,7 +86,6 @@ process prepare_genome{
   This process mainly checks the inputs for improperly formed CRAM/BAM input files
 */
 
-
 process qc_input {
     tag                    { name }
     executor               myExecutor
@@ -99,10 +100,10 @@ process qc_input {
     stageOutMode           'copy'
     
     input:
-    set val(name), file(CRAM) from CRAM_Ch1	
+    set val(name), file(CRAM) from CRAM_Ch1
 
     output:
-    set val(name), file('*_ok.cram') optional true into extract_ch
+    set val(name), file('*_ok.cram') optional true into extract_unmapped_ch,extract_clipped_ch
     
     script:
     """
@@ -162,26 +163,29 @@ process qc_input {
 process extract_unmapped {
     tag                    { name }
     executor               myExecutor
-    cpus                   4
+    cpus                   8
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 params.samtoolsMod
     publishDir             readPrepPath, mode: "copy"
-    validExitStatus        0,1
     errorStrategy          'finish'
     scratch                '/scratch'
     stageOutMode           'copy'
     
     input:
-    set val(id), file(cram) from extract_ch	
+    set val(id), file(cram) from extract_unmapped_ch
     file genome from genome_file
     file index from genome_index_ch
 
     output:
-    set val(id), file("${id}.both-unmapped.R{1,2}.fastq") optional true into fq_pe_ch
-    set val(id), file("${id}.orphans.unmapped.fastq") optional true into fq_se_ch
+    set val(id), file("${id}.all-unmapped.R{1,2}.fastq.gz") optional true into fq_pe_ch
+    // set val(id), file("${id}.orphans.unmapped.fastq") optional true into fq_se_ch
     file "${id}.improper.bam" optional true // all improper pairs; we save this for now, might be useful later
     set val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
+    
+
+    // TODO: leaving this switch in but note that none of the samples in the workflow are SE data;
+    // we can prep for this but it's not high priority yet.
     
     script:
     if(params.singleEnd) {
@@ -189,10 +193,10 @@ process extract_unmapped {
     """
     # TODO: UNTESTED!!!!
     # we only need to extract reads that are unmapped, no worries about pairing
-    samtools view -@ ${defaultCPU} -hbt ${index} -f 4 -o ${id}.unmapped.bam ${cram} 
+    samtools view -@ ${task.cpus} -hbt ${index} -f 4 -o ${id}.unmapped.bam ${cram} 
     
     # convert to FASTQ
-    samtools fastq -@ ${defaultCPU} ${id}.SE.unmapped.bam > ${id}.orphans.unmapped.fastq
+    samtools fastq -@ ${task.cpus} ${id}.SE.unmapped.bam > ${id}.orphans.unmapped.fastq
     """
     
     } else {
@@ -204,38 +208,82 @@ process extract_unmapped {
     # now capture the three classes; this is much faster than parsing the full BAM each time
     
     # both unmapped
-    samtools view -@ ${task.cpus} -hbt ${index} \\
+    samtools view -@ ${task.cpus} -hb \\
         -f 12 -F 2304 -o ${id}.both-unmapped.bam ${id}.improper.bam
 
     samtools fastq -@ ${task.cpus} ${id}.both-unmapped.bam \\
-        -1 ${id}.both-unmapped.R1.fastq -2 ${id}.both-unmapped.R2.fastq
+        -1 ${id}.both-unmapped.R1.fastq.gz -2 ${id}.both-unmapped.R2.fastq.gz
         
     # R1 only unmapped
-    samtools view -@ ${task.cpus} -hbt ${index} \\
+    samtools view -@ ${task.cpus} -hb \\
         -f 4 -F 2312 -o ${id}.R1-unmapped.bam ${id}.improper.bam
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
-        -1 ${id}.R1-unmapped.R1.fastq -2 ${id}.R1-unmapped.R2.fastq
+        -1 ${id}.R1-unmapped.R1.fastq.gz -2 ${id}.R1-unmapped.R2.fastq.gz
+    
     # R2 only unmapped
-    samtools view -@ ${task.cpus} -hbt ${index} \\
-        -f 8 -F 2308 -o ${id}.R2-unmapped.bam ${id}.improper.bam
-        
+    samtools view -@ ${task.cpus} -hb \\
+        -f 8 -F 2308 -o ${id}.R2-unmapped.bam ${id}.improper.bam    
     samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
-        -1 ${id}.R2-unmapped.R1.fastq -2 ${id}.R2-unmapped.R2.fastq
+        -1 ${id}.R2-unmapped.R1.fastq.gz -2 ${id}.R2-unmapped.R2.fastq.gz
     
     # combine unmapped BAM files for later analysis
     samtools merge -@ ${task.cpus} ${id}.unmapped.bam ${id}.both-unmapped.bam ${id}.R1-unmapped.bam ${id}.R2-unmapped.bam
     
+    # combine R1 reads
+    cat ${id}.both-unmapped.R1.fastq.gz ${id}.R1-unmapped.R1.fastq.gz ${id}.R2-unmapped.R1.fastq.gz > ${id}.all-unmapped.R1.fastq.gz
+
+    # combine R2 reads
+    cat ${id}.both-unmapped.R2.fastq.gz ${id}.R1-unmapped.R2.fastq.gz ${id}.R2-unmapped.R2.fastq.gz > ${id}.all-unmapped.R2.fastq.gz
+
+    ## NOTE: in the above we are keeping *all* paired reads if either or both are unmapped. 
     # combined SE unmapped FASTQ into one file for assembly
-    cat ${id}.R1-unmapped.R1.fastq ${id}.R2-unmapped.R2.fastq >> ${id}.orphans.unmapped.fastq
+    ## cat ${id}.R1-unmapped.R1.fastq ${id}.R2-unmapped.R2.fastq >> ${id}.orphans.unmapped.fastq
     
     # we could combine the mapped reads here, but we'll use the original BAM instead
     ## cat ${id}.R1-unmapped.R2.fastq ${id}.R2-unmapped.R1.fastq >> ${id}.orphans.mapped.fastq
     
     """
-    
     }
-
 }
+
+process extract_clipped {
+    tag                    { name }
+    executor               myExecutor
+    cpus                   20
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    module                 params.samtoolsMod,params.pysamMod
+    publishDir             readPrepPath, mode: "copy"
+    scratch                '/scratch'
+    stageOutMode           'copy'
+    
+    input:
+    set val(id), file(cram) from extract_clipped_ch
+    file genome from genome_file
+    file index from genome_index_ch
+
+    output:
+    set val(id), file("${id}.all-clipped.R{1,2}.fastq.gz") optional true into fq_pe_clipped_ch
+    file "${id}.clipped.bam" optional true // all improper pairs; we save this for now, might be useful later
+    set val(id), file("${id}.clipped.bam") optional true into clipped_bam_ch  // all unaligned + mates
+    
+    script:
+    if(params.singleEnd) {
+    """
+    echo "SE support NYI"
+    exit 1
+    """
+    } else {    
+    """
+    samtools view -@ ${task.cpus - 8} -hbt ${index} -b ${cram} | \
+        samtools collate --output-fmt bam -@ 8 -O - /scratch | \
+        clipped-filter.py > ${id}.clipped.tmp.bam
+
+    samtools sort -@ ${id}.clipped.tmp.bam -o ${id}.clipped.bam ${id}.clipped.bam
+    """
+    }
+}
+
 
 /*
   trimming
@@ -250,10 +298,8 @@ process trimming {
     memory                 "$defaultMemory GB"
     publishDir             trimPath, mode: "copy"
     module                 params.fastpMod
-//     validExitStatus        0,1
-//     errorStrategy          'finish'
-//     scratch                '/scratch'
-//     stageOutMode           'copy'
+    scratch                '/scratch'
+
 
     input:
     set val(name), file(reads) from fq_pe_ch
@@ -268,54 +314,19 @@ process trimming {
     adapterOptionsSE = params.guess_adapter ? ' ' : " --adapter_sequence=${params.forward_adapter} "
     adapterOptionsPE = params.guess_adapter ? ' --detect_adapter_for_pe ' : " --adapter_sequence=${params.forward_adapter}  --adapter_sequence_r2=${params.reverse_adapter} "
 
+    // TODO: leaving this switch in but note that none of the samples in the workflow are SE data;
+    // we can prep for this but it's not high priority yet.
+
     if(params.singleEnd){
     """
     fastp --in1 ${reads[0]} --out1 "${name}.SE.R1.trimmed.fq" ${adapterOptionsSE} ${trimOptions} --thread ${task.cpus} -w ${task.cpus} --html "${name}"_SE_fastp.html --json "${name}"_SE_fastp.json
     """
     } else {
     """
-    fastp --in1 ${reads[0]} --in2 ${reads[1]} --out1 "${name}.PE.R1.trimmed.fq"  --out2 "${name}.PE.R2.trimmed.fq" --unpaired1 "${name}.unpR1.trimmed.fq" --unpaired2 "${name}.unpR2.trimmed.fq" ${adapterOptionsPE}  ${trimOptions} --thread ${task.cpus} -w ${task.cpus}  --html "${name}"_PE_fastp.html --json "${name}"_PE_fastp.json
+    fastp --in1 ${reads[0]} --in2 ${reads[1]} --out1 "${name}.PE.R1.trimmed.fastq.gz"  --out2 "${name}.PE.R2.trimmed.fastq.gz" --unpaired1 "${name}.unpR1.trimmed.fastq.gz" --unpaired2 "${name}.unpR2.trimmed.fastq.gz" ${adapterOptionsPE}  ${trimOptions} --thread ${task.cpus} -w ${task.cpus}  --html "${name}"_PE_fastp.html --json "${name}"_PE_fastp.json
     """
     }
 }
-
-
-process trimming_orphans {
-    tag                    { name }
-    executor               myExecutor
-    clusterOptions         params.clusterAcct 
-    cpus                   2
-    queue                  params.myQueue
-    memory                 "$defaultMemory GB"
-    publishDir             trimPath, mode: "copy"
-    module                 params.fastpMod
-
-    input:
-    set val(name), file(reads) from fq_se_ch
-    
-    output:
-    set val(name), file('*.orphans.trimmed.fq') optional true into trim_orphan_ch, trim_orphan_ch2
-    set val(name), file('*.json') optional true into multiqc_orphan_ch
-    file '*'
-	    
-    script:
-    trimOptions      = params.skipTrim ? ' ' :  ' -l 20 -q 20  --cut_right --cut_right_window_size 3 --cut_right_mean_quality 20 '
-    adapterOptions   = params.guess_adapter ? ' ' : ' --adapter_fasta="adapters.fa" '
-    """
-    # we generate an adapter sequence file on the fly here (should move this into a stored process)
-    
-    cat << ADAPTERS > adapters.fa
-    >forward_adapter
-    ${params.forward_adapter}
-    >reverse_adapter
-    ${params.reverse_adapter}
-    ADAPTERS
-    
-    fastp --in1 ${reads[0]} --out1 "${name}.orphans.trimmed.fq" ${adapterOptions} ${trimOptions} --thread ${task.cpus} -w ${task.cpus} --html "${name}"_orphans_fastp.html --json "${name}"_orphans_fastp.json
-    """
-}
-
-
 
 /*
   *Megahit for different input data types:
@@ -323,13 +334,6 @@ process trimming_orphans {
   *megahit --12 interleaved.fq -o out # one paired & interleaved paired-end library
   *megahit -1 a1.fq,b1.fq,c1.fq -2 a2.fq,b2.fq,c2.fq -r se1.fq,se2.fq -o out # 3 paired-end libraries + 2 SE libraries
 */
-
-
-// we will want to split this by SE CRAM and PE CRAM at some point; 
-// logic is different enough to be an issue
-
-// TODO: at the moment SE CRAM assembly is **not** supported, we will need an if/else
-// to handle this one
 
 process megahit_assemble {
     tag                    { name }
