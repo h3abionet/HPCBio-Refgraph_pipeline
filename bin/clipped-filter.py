@@ -12,7 +12,7 @@ import pysam
 
 # if either R1 or R2 is clipped (has a 3' or 5' soft clip) keep both reads
 
-# Basic code template came from: https://www.biostars.org/p/306041/
+# Basic code template (majorly tweaked here) came from: https://www.biostars.org/p/306041/
 def read_pair_generator(bam):
     """
     Generate read pairs in a BAM file or within a region string.
@@ -22,15 +22,20 @@ def read_pair_generator(bam):
 	
 	# capture all primary alns with same read ID (R1 and R2) in dicts
     for read in bam:
+        if read.is_secondary or read.is_supplementary:
+            continue
         qname = read.query_name
         if qname not in read_dict:
             read_dict[qname] = read
         else:
             if read.is_read1:
-                yield read, read_dict[qname]
+                r2 = read_dict[qname]
+                del read_dict[qname]
+                yield read, r2
             else:
-                yield read_dict[qname], read
-            del read_dict[qname]
+                r1 = read_dict[qname]
+                del read_dict[qname]
+                yield r1, read
 
 def is_clipped(read, cutoff):
 	"""
