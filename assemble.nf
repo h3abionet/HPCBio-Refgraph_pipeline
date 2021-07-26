@@ -16,16 +16,19 @@ params.guess_adapter         = true            /*auto-detect adapter from input 
 params.forward_adapter       = false           /*adapter sequence to be clipped off (forward). */
 params.reverse_adapter       = false           /*adapter sequence to be clipped off (reverse). Used for paired reads only*.*/
 
+/*Stage*/
+stage = "assembly"
+
 /*output folder paths*/
 readPrepPath                 = "${params.outputDir}/read_prep"
 trimPath                     = "${params.outputDir}/trimmed"
 megahitPath                  = "${params.outputDir}/megahit"
 masurcaPath                  = "${params.outputDir}/masurca"
+multiqcPath                  = "${params.outputDir}/multiqc"
+metricsPath                  = "${params.outputDir}/assembly_metrics"
 
 // Moving this to annotation
 // kraken2Path                  = "${params.outputDir}/kraken2"
-multiqcPath                  = "${params.outputDir}/multiqc"
-metricsPath                  = "${params.outputDir}/assembly_metrics"
 
 /*cluster parameters */
 myExecutor                   = 'slurm'
@@ -36,21 +39,9 @@ assemblerCPU                 = '12'
 assemblerMemory              = '100'
 params.clusterAcct           = " -A h3bionet "
 
-/*software stack*/
-params.perlMod               = 'Perl/5.24.1-IGB-gcc-4.9.4'
-params.seqkitMod             = 'seqkit/0.12.1'
-params.fastpMod              = 'fastp/0.20.0-IGB-gcc-4.9.4'
-params.samtoolsMod           = 'SAMtools/1.12-IGB-gcc-8.2.0'
-params.megahitMod            = 'MEGAHIT/1.2.9-IGB-gcc-8.2.0'
-params.masurcaMod            = 'MaSuRCA/3.4.2-IGB-gcc-8.2.0'
-params.pysamMod              = 'Python/3.7.2-IGB-gcc-8.2.0'
-params.assemblathon          = "/home/groups/hpcbio/apps/FAlite/assemblathon_stats.pl"
-params.multiqcMod            = "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
-
 /*Prepare input*/
 genome_file                  = file(params.genome)
 genomeStore                  = genome_file.getParent()
-
 
 // Sanity checks
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
@@ -70,7 +61,7 @@ process prepare_genome{
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.samtoolsMod
+    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     storeDir               genomeStore
     
     input:
@@ -97,7 +88,7 @@ process qc_input {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.samtoolsMod
+    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     errorStrategy          { task.exitStatus=1 ? 'ignore' : 'terminate' }
     
     input:
@@ -165,7 +156,7 @@ process extract_improper {
     cpus                   12
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.samtoolsMod
+    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     publishDir             readPrepPath
     
     input:
@@ -209,7 +200,7 @@ process extract_unmapped {
     cpus                   12
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.samtoolsMod
+    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     publishDir             readPrepPath
     
     input:
@@ -290,7 +281,7 @@ process extract_clipped {
     cpus                   12
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.samtoolsMod,params.pysamMod
+    module                 "SAMtools/1.12-IGB-gcc-8.2.0","Python/3.7.2-IGB-gcc-8.2.0"
     publishDir             readPrepPath, mode: "copy"    
     stageOutMode           'copy'
     
@@ -329,7 +320,7 @@ process merge_pairs {
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.seqkitMod
+    module                 "seqkit/0.12.1"
     publishDir             readPrepPath
  
     input:
@@ -384,13 +375,13 @@ process trimming {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     publishDir             trimPath
-    module                 params.fastpMod
+    module                 "fastp/0.20.0-IGB-gcc-4.9.4"
 
     input:
     set val(name), file(reads) from merge_trim_ch
     
     output:
-    set val(name), file('*.PE.R{1,2}.trimmed.fastq.gz'), file('*.unpR{1,2}.trimmed.fastq.gz') optional true into trim_megahit_ch, trim_masurca_ch, trim_fastqc
+    set val(name), file('*.PE.R{1,2}.trimmed.fastq.gz'), file('*.unpR{1,2}.trimmed.fastq.gz') optional true into trim_megahit_ch, trim_masurca_ch, trim_fastqc, trim_aln_ch
     set val(name), file('*.json') optional true into trim_multiqc_ch
     file '*.html'
         
@@ -436,6 +427,7 @@ process trimming {
 process fastqc_post {
     tag "FASTQC-Posttrim ${id}"
     executor               myExecutor
+    clusterOptions         params.clusterAcct     
     cpus                   4
     queue                  params.myQueue
     memory                 "12 GB"
@@ -468,14 +460,14 @@ process megahit_assemble {
     cpus                   24
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    module                 params.megahitMod 
+    module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
     publishDir             megahitPath
     
     input:
     set val(name), file(pefastqs), file(sefastqs) from trim_megahit_ch
 
     output:
-    set val(name), val("megahit"), file("${name}/final.contigs.fa") into megahit_metrics_ch
+    set val(name), val("megahit"), file("${name}/final.contigs.fa") into megahit_rename_ch
     file("${name}/*")
 
     script:
@@ -504,18 +496,18 @@ process megahit_assemble {
 process masurca_assemble {
     tag                    { name }
     executor               myExecutor
-    clusterOptions         params.clusterAcct 
+    clusterOptions         params.clusterAcct
     cpus                   16
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    module                 params.masurcaMod 
+    module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
     publishDir             masurcaPath
 
     input:
     set val(name), file(pefastqs), file(sefastqs) from trim_masurca_ch
 
     output:
-    set val(name), val("masurca"), file("${name}/CA/final.genome.scf.fasta") into masurca_metrics_ch
+    set val(name), val("masurca"), file("${name}/CA/final.genome.scf.fasta") into masurca_rename_ch
     file("${name}/*")
 
     script:
@@ -551,16 +543,45 @@ process masurca_assemble {
     """
 }
 
-all_assemblies_metrics_ch = megahit_metrics_ch.mix(masurca_metrics_ch)
+all_assemblies_rename_ch = megahit_rename_ch.mix(masurca_rename_ch)
+
+process assembly_rename {
+    tag                    { name }
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   1
+    queue                  params.myQueue
+    memory                 "$assemblerMemory GB"
+    // TODO: a base perl install is fine, but we have this as a placeholder
+    // just in case to remind us for Docker/Singularity
+    // module                 "Perl/5.24.1-IGB-gcc-4.9.4"
+    publishDir             "${params.outputDir}/FinalAssemblies/${assembler}"
+
+    input:
+    set val(name), val(assembler), file(assembly) from all_assemblies_rename_ch
+
+    output:
+    set val(name), val(assembler), file("${name}.${assembler}.final.fasta") into all_assemblies_metrics_ch,all_assemblies_aln_ch
+
+    script:
+    // Strip off anything after the first '.'
+    shortname = name.replaceAll(~/\.\S+$/, "")
+    """
+    perl -p -e 's/^>(\\N+)/>${name}:\$1/' ${assembly} > ${name}.${assembler}.final.fasta
+    """
+}
+
+// all_assemblies_metrics_ch = megahit_metrics_ch.mix(masurca_metrics_ch)
 
 process assembly_metrics {
     tag {id}
     executor               myExecutor
+    clusterOptions         params.clusterAcct     
     cpus                   4
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${params.outputDir}/quast/${assembler}"
+    publishDir             "${params.outputDir}/QUAST/${assembler}"
 
     input:
     set val(id), val(assembler), file(asm) from all_assemblies_metrics_ch
@@ -579,13 +600,52 @@ process assembly_metrics {
     """
 }
 
+// not sure this will work
+process aln_reads {
+    tag {id}
+    executor               myExecutor
+    cpus                   8
+    queue                  params.myQueue
+    clusterOptions         params.clusterAcct     
+    memory                 "12 GB"
+    module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
+    publishDir             "${params.outputDir}/BWA-MEM/${assembler}"
+
+    input:
+    set val(id), val(assembler), file(assembly), file(pereads), file(sereads) from all_assemblies_aln_ch.combine(trim_aln_ch, by:0)
+
+    output:
+    file "${id}.${assembler}.sorted.pe.bam*"
+    file "${id}.${assembler}.sorted.se.bam*"
+    file "${id}.${assembler}.sorted.merged.bam*"
+
+    script:
+    """
+    bwa index ${assembly}
+
+    # PE
+    bwa mem -t ${task.cpus - 4} ${assembly} ${pereads[0]} ${pereads[1]} | samtools sort -@ 4 -o ${id}.${assembler}.sorted.pe.bam
+    samtools index ${id}.${assembler}.sorted.pe.bam
+
+    # SE
+    cat ${sereads[0]} ${sereads[1]} > ${id}.se.fastq.gz
+    bwa mem -t ${task.cpus - 4} ${assembly} ${id}.se.fastq.gz | samtools sort -@ 4 -o ${id}.${assembler}.sorted.se.bam
+    samtools index ${id}.${assembler}.sorted.se.bam
+
+    # merge both files
+    samtools merge -@ ${task.cpus} ${id}.${assembler}.sorted.merged.bam ${id}.${assembler}.sorted.pe.bam ${id}.${assembler}.sorted.se.bam
+    samtools index ${id}.${assembler}.sorted.merged.bam    
+    """
+}
+
+
 process MultiQC {
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 params.multiqcMod
+    module                 "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
     publishDir             multiqcPath
  
     input:
