@@ -19,16 +19,7 @@ params.reverse_adapter       = false           /*adapter sequence to be clipped 
 /*Stage*/
 stage = "assembly"
 
-/*output folder paths*/
-readPrepPath                 = "${params.outputDir}/read_prep"
-trimPath                     = "${params.outputDir}/trimmed"
-megahitPath                  = "${params.outputDir}/megahit"
-masurcaPath                  = "${params.outputDir}/masurca"
-multiqcPath                  = "${params.outputDir}/multiqc"
-metricsPath                  = "${params.outputDir}/assembly_metrics"
-
-// Moving this to annotation
-// kraken2Path                  = "${params.outputDir}/kraken2"
+resultsPath = "${params.outputDir}/${stage}"
 
 /*cluster parameters */
 myExecutor                   = 'slurm'
@@ -157,7 +148,7 @@ process extract_improper {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             readPrepPath
+    publishDir             "${resultsPath}/Read-Prep/Improper"
     
     input:
     set val(id), file(cram) from extract_unmapped_ch
@@ -201,7 +192,7 @@ process extract_unmapped {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             readPrepPath
+    publishDir             "${resultsPath}/Read-Prep/Unmapped"
     
     input:
     set val(id), file(bam) from improper_unmapped_ch
@@ -282,8 +273,7 @@ process extract_clipped {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0","Python/3.7.2-IGB-gcc-8.2.0"
-    publishDir             readPrepPath, mode: "copy"    
-    stageOutMode           'copy'
+    publishDir             "${resultsPath}/Read-Prep/Clipped"    
     
     input:
     set val(id), file(bam) from improper_clipped_ch
@@ -321,7 +311,7 @@ process merge_pairs {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "seqkit/0.12.1"
-    publishDir             readPrepPath
+    publishDir             "${resultsPath}/Read-Prep/Merged"
  
     input:
     set val(id), file(unmapped), file(clipped) from fq_pe_unmapped_ch.join(fq_pe_clipped_ch)
@@ -348,7 +338,7 @@ process fastqc {
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "FastQC/0.11.8-Java-1.8.0_152"
-    publishDir             "${params.outputDir}/FASTQC-Pretrim"
+    publishDir             "${resultsPath}/FASTQC-Pretrim"
 
     input:
     set val(id), file(reads) from merge_fastqc_ch
@@ -362,7 +352,6 @@ process fastqc {
     """
 }
 
-
 /*
   trimming
 */
@@ -374,7 +363,7 @@ process trimming {
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    publishDir             trimPath
+    publishDir             "${resultsPath}/Read-Prep/Trimmed"
     module                 "fastp/0.20.0-IGB-gcc-4.9.4"
 
     input:
@@ -432,7 +421,7 @@ process fastqc_post {
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "FastQC/0.11.8-Java-1.8.0_152"
-    publishDir             "${params.outputDir}/FASTQC-Posttrim"
+    publishDir             "${resultsPath}/FASTQC-Posttrim"
 
     input:
     set val(id), file(pereads), file(sereads) from trim_fastqc
@@ -461,7 +450,7 @@ process megahit_assemble {
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
-    publishDir             megahitPath
+    publishDir             "${resultsPath}/Raw-Assembly/megahit"
     
     input:
     set val(name), file(pefastqs), file(sefastqs) from trim_megahit_ch
@@ -477,7 +466,7 @@ process megahit_assemble {
     exit 1
     # megahit -1 ${fastqs[0]} -o ${name}.megahit_results
     # 
-    # perl $params.assemblathon ${name}.megahit_results/final.contigs.fa > ${name}.megahit_results/final.contigs.fa.stats
+    # perl \$params.assemblathon ${name}.megahit_results/final.contigs.fa > ${name}.megahit_results/final.contigs.fa.stats
     """
     } else {
     """
@@ -501,7 +490,7 @@ process masurca_assemble {
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
-    publishDir             masurcaPath
+    publishDir             "${resultsPath}/Raw-Assembly/masurca"
 
     input:
     set val(name), file(pefastqs), file(sefastqs) from trim_masurca_ch
@@ -555,7 +544,7 @@ process assembly_rename {
     // TODO: a base perl install is fine, but we have this as a placeholder
     // just in case to remind us for Docker/Singularity
     // module                 "Perl/5.24.1-IGB-gcc-4.9.4"
-    publishDir             "${params.outputDir}/FinalAssemblies/${assembler}"
+    publishDir             "${resultsPath}/Final-Assembly/${assembler}"
 
     input:
     set val(name), val(assembler), file(assembly) from all_assemblies_rename_ch
@@ -581,22 +570,21 @@ process assembly_metrics {
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${params.outputDir}/QUAST/${assembler}"
+    publishDir             "${resultsPath}/QUAST/"
 
     input:
     set val(id), val(assembler), file(asm) from all_assemblies_metrics_ch
 
     output:
-    file "${id}/*" 
-    file "${id}.${assembler}.report.txt" into metrics_multiqc_ch
+    file "${id}.${assembler}/*" 
+    file "${id}.${assembler}" into metrics_multiqc_ch
 
     script:
     """
     quast.py \\
-        --output-dir ${id} \\
+        --output-dir ${id}.${assembler} \\
         --threads ${task.cpus} \\
         ${asm}
-    ln -s ${id}/report.txt ${id}.${assembler}.report.txt
     """
 }
 
@@ -609,7 +597,7 @@ process aln_reads {
     clusterOptions         params.clusterAcct     
     memory                 "12 GB"
     module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             "${params.outputDir}/BWA-MEM/${assembler}"
+    publishDir             "${resultsPath}/BWA-MEM/${assembler}"
 
     input:
     set val(id), val(assembler), file(assembly), file(pereads), file(sereads) from all_assemblies_aln_ch.combine(trim_aln_ch, by:0)
@@ -638,15 +626,14 @@ process aln_reads {
     """
 }
 
-
 process MultiQC {
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "MultiQC/1.7-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             multiqcPath
+    module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
+    publishDir             "${resultsPath}/MultiQC"
  
     input:
     file('./QUAST/*') from metrics_multiqc_ch.collect().ifEmpty([])
@@ -658,6 +645,6 @@ process MultiQC {
     file "multiqc*"
 
     """
-    multiqc . 
+    multiqc  .
     """
 } 
