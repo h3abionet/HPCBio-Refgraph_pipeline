@@ -83,10 +83,10 @@ process qc_input {
     errorStrategy          { task.exitStatus=1 ? 'ignore' : 'terminate' }
     
     input:
-    set val(id), file(CRAM) from CRAM_Ch1
+    tuple val(id), file(CRAM) from CRAM_Ch1
 
     output:
-    set val(id), file('*_ok.cram') optional true into extract_unmapped_ch,extract_clipped_ch
+    tuple val(id), file('*_ok.cram') optional true into extract_unmapped_ch,extract_clipped_ch
     
     script:
     """
@@ -114,7 +114,7 @@ process qc_input {
    
    This can be accomplished with samtools though the logic is a little tricky with the bit
    flags.  Best way would be to extract pairs where any of the reads are unmapped, then 
-   pull out subsets using flags. Otherwise we're running through the 
+   pull out subtuples using flags. Otherwise we're running through the 
    
    # both unmapped; -f means unmapped, 
    # bit flag 12  = both reads unmapped (bit flag 4 & 8)
@@ -125,14 +125,14 @@ process qc_input {
    # bit flag 4   = R1 unmapped
    # bit flag 2312 = Mate unmapped and not primary alignment (removes these), not supplemental
    #                Note this is to make sure we're not keeping reads *also* in the first  
-   #                set
+   #                tuple
    samtools view -hb -f 4 -F 2312 alignments.bam  > R1_unmapped.bam
    
    # R2 mapped, R1 not
    # bit flag 8    = R2 (mate) unmapped
    # bit flag 2308 = R1 (read) unmapped and not primary alignment (removes these), not supplemental
    #                Note this is to make sure we're not keeping reads *also* in the first  
-   #                set
+   #                tuple
    samtools view -hb -f 8 -F 2308 alignments.bam  > R2_unmapped.bam
 */
 
@@ -151,13 +151,13 @@ process extract_improper {
     publishDir             "${resultsPath}/Read-Prep/Improper"
     
     input:
-    set val(id), file(cram) from extract_unmapped_ch
+    tuple val(id), file(cram) from extract_unmapped_ch
     file genome from genome_file
     file index from genome_index_ch
 
     output:
     // all unaligned + mates
-    set val(id), file("${id}.improper.bam") into improper_unmapped_ch, improper_clipped_ch
+    tuple val(id), file("${id}.improper.bam") into improper_unmapped_ch, improper_clipped_ch
     
     // TODO: leaving this switch in but note that none of the samples in the workflow are SE data;
     // we can prep for this but it's not high priority and the logic for extracting discordant
@@ -195,11 +195,11 @@ process extract_unmapped {
     publishDir             "${resultsPath}/Read-Prep/Unmapped"
     
     input:
-    set val(id), file(bam) from improper_unmapped_ch
+    tuple val(id), file(bam) from improper_unmapped_ch
 
     output:
-    set val(id), file("${id}.all-unmapped.R{1,2}.fastq.gz") optional true into fq_pe_unmapped_ch
-    set val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
+    tuple val(id), file("${id}.all-unmapped.R{1,2}.fastq.gz") optional true into fq_pe_unmapped_ch
+    tuple val(id), file("${id}.unmapped.bam") optional true into unmapped_bam_ch  // all unaligned + mates
 
     // TODO: leaving this switch in but note that none of the samples in the workflow are SE data;
     // we can prep for this but it's not high priority yet.
@@ -276,11 +276,11 @@ process extract_clipped {
     publishDir             "${resultsPath}/Read-Prep/Clipped"    
     
     input:
-    set val(id), file(bam) from improper_clipped_ch
+    tuple val(id), file(bam) from improper_clipped_ch
 
     output:
-    set val(id), file("${id}.clipped.bam") into extract_sort_ch // all clipped pairs; we save this for now
-    set val(id), file("${id}.all-clipped.R{1,2}.fastq.gz") into fq_pe_clipped_ch
+    tuple val(id), file("${id}.clipped.bam") into extract_sort_ch // all clipped pairs; we save this for now
+    tuple val(id), file("${id}.all-clipped.R{1,2}.fastq.gz") into fq_pe_clipped_ch
 
     script:
     if(params.singleEnd) {
@@ -314,10 +314,10 @@ process merge_pairs {
     publishDir             "${resultsPath}/Read-Prep/Merged"
  
     input:
-    set val(id), file(unmapped), file(clipped) from fq_pe_unmapped_ch.join(fq_pe_clipped_ch)
+    tuple val(id), file(unmapped), file(clipped) from fq_pe_unmapped_ch.join(fq_pe_clipped_ch)
 
     output:
-    set val(id), file("${id}.all-reads.R{1,2}.fastq.gz") into merge_trim_ch, merge_fastqc_ch
+    tuple val(id), file("${id}.all-reads.R{1,2}.fastq.gz") into merge_trim_ch, merge_fastqc_ch
     file("*.rmdup.txt")
 
     """
@@ -341,7 +341,7 @@ process fastqc {
     publishDir             "${resultsPath}/FASTQC-Pretrim"
 
     input:
-    set val(id), file(reads) from merge_fastqc_ch
+    tuple val(id), file(reads) from merge_fastqc_ch
 
     output:
     file "*_fastqc.{zip,html}" into fastqc_results
@@ -367,11 +367,11 @@ process trimming {
     module                 "fastp/0.20.0-IGB-gcc-4.9.4"
 
     input:
-    set val(name), file(reads) from merge_trim_ch
+    tuple val(name), file(reads) from merge_trim_ch
     
     output:
-    set val(name), file('*.PE.R{1,2}.trimmed.fastq.gz'), file('*.unpR{1,2}.trimmed.fastq.gz') optional true into trim_megahit_ch, trim_masurca_ch, trim_fastqc, trim_aln_ch
-    set val(name), file('*.json') optional true into trim_multiqc_ch
+    tuple val(name), file('*.PE.R{1,2}.trimmed.fastq.gz'), file('*.unpR{1,2}.trimmed.fastq.gz') optional true into trim_megahit_ch, trim_masurca_ch, trim_fastqc, trim_aln_ch
+    tuple val(name), file('*.json') optional true into trim_multiqc_ch
     file '*.html'
         
     script:
@@ -424,7 +424,7 @@ process fastqc_post {
     publishDir             "${resultsPath}/FASTQC-Posttrim"
 
     input:
-    set val(id), file(pereads), file(sereads) from trim_fastqc
+    tuple val(id), file(pereads), file(sereads) from trim_fastqc
 
     output:
     file "*_fastqc.{zip,html}" into fastqc_trimmed_results
@@ -453,10 +453,10 @@ process megahit_assemble {
     publishDir             "${resultsPath}/Raw-Assembly/megahit"
     
     input:
-    set val(name), file(pefastqs), file(sefastqs) from trim_megahit_ch
+    tuple val(name), file(pefastqs), file(sefastqs) from trim_megahit_ch
 
     output:
-    set val(name), val("megahit"), file("${name}/final.contigs.fa") into megahit_rename_ch
+    tuple val(name), val("megahit"), file("${name}/final.contigs.fa") into megahit_rename_ch
     file("${name}/*")
 
     script:
@@ -493,10 +493,10 @@ process masurca_assemble {
     publishDir             "${resultsPath}/Raw-Assembly/masurca"
 
     input:
-    set val(name), file(pefastqs), file(sefastqs) from trim_masurca_ch
+    tuple val(name), file(pefastqs), file(sefastqs) from trim_masurca_ch
 
     output:
-    set val(name), val("masurca"), file("${name}/CA/final.genome.scf.fasta") into masurca_rename_ch
+    tuple val(name), val("masurca"), file("${name}/CA/final.genome.scf.fasta") into masurca_rename_ch
     file("${name}/*")
 
     script:
@@ -544,19 +544,20 @@ process assembly_rename {
     // TODO: a base perl install is fine, but we have this as a placeholder
     // just in case to remind us for Docker/Singularity
     // module                 "Perl/5.24.1-IGB-gcc-4.9.4"
-    publishDir             "${resultsPath}/Final-Assembly/${assembler}"
+    publishDir             "${resultsPath}/Final-Assembly/${assembler}",mode:"copy"
 
     input:
-    set val(name), val(assembler), file(assembly) from all_assemblies_rename_ch
+    tuple val(name), val(assembler), file(assembly) from all_assemblies_rename_ch
 
     output:
-    set val(name), val(assembler), file("${name}.${assembler}.final.fasta") into all_assemblies_metrics_ch,all_assemblies_aln_ch
+    tuple val(name), val(assembler), file("${name}.${assembler}.final.fasta") into all_assemblies_metrics_ch,all_assemblies_aln_ch
 
     script:
     // Strip off anything after the first '.'
     shortname = name.replaceAll(~/\.\S+$/, "")
     """
     perl -p -e 's/^>(\\N+)/>${name}:\$1/' ${assembly} > ${name}.${assembler}.final.fasta
+
     """
 }
 
@@ -570,10 +571,11 @@ process assembly_metrics {
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${resultsPath}/QUAST/"
+    publishDir             "${resultsPath}/QUAST/",mode:"copy"
+    errorStrategy          { task.exitStatus=4 ? 'ignore' : 'terminate' }
 
     input:
-    set val(id), val(assembler), file(asm) from all_assemblies_metrics_ch
+    tuple val(id), val(assembler), file(asm) from all_assemblies_metrics_ch
 
     output:
     file "${id}.${assembler}/*" 
@@ -585,6 +587,7 @@ process assembly_metrics {
         --output-dir ${id}.${assembler} \\
         --threads ${task.cpus} \\
         ${asm}
+
     """
 }
 
@@ -597,10 +600,11 @@ process aln_reads {
     clusterOptions         params.clusterAcct     
     memory                 "12 GB"
     module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/BWA-MEM/${assembler}"
+    publishDir             "${resultsPath}/BWA-MEM/${assembler}",mode:"copy"
+    errorStrategy          { task.attempt == 5 ? 'retry' : 'ignore' }
 
     input:
-    set val(id), val(assembler), file(assembly), file(pereads), file(sereads) from all_assemblies_aln_ch.combine(trim_aln_ch, by:0)
+    tuple val(id), val(assembler), file(assembly), file(pereads), file(sereads) from all_assemblies_aln_ch.combine(trim_aln_ch, by:0)
 
     output:
     file "${id}.${assembler}.sorted.pe.bam*"
@@ -622,7 +626,8 @@ process aln_reads {
 
     # merge both files
     samtools merge -@ ${task.cpus} ${id}.${assembler}.sorted.merged.bam ${id}.${assembler}.sorted.pe.bam ${id}.${assembler}.sorted.se.bam
-    samtools index ${id}.${assembler}.sorted.merged.bam    
+    samtools index ${id}.${assembler}.sorted.merged.bam 
+
     """
 }
 
@@ -633,7 +638,7 @@ process MultiQC {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
-    publishDir             "${resultsPath}/MultiQC"
+    publishDir             "${resultsPath}/MultiQC",mode:"copy"
  
     input:
     file('./QUAST/*') from metrics_multiqc_ch.collect().ifEmpty([])
@@ -646,5 +651,6 @@ process MultiQC {
 
     """
     multiqc  .
+
     """
 } 
