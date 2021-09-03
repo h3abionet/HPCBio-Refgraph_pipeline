@@ -146,24 +146,31 @@ filter ()
 
 # Masurca -----
 cd masurca
+
 for i in *.masurca.final.fasta
-do id=$(echo $i | sed 's/.final.fasta//1')
-    echo "Now filtering ${i}"
-    seqkit seq --min-len 500 ${i} > ../../../annotation/seqkit/masurca/$id.filtered.fasta
+do idi=$(echo $i | sed 's/.final.fasta//1')
+    echo "[Now filtering ${i}]"
+    seqkit seq --min-len 500 ${i} > ../../../annotation/seqkit/masurca/$idi.filtered.fasta
+    echo "[Now creating stats on filtered fasta files]"
+    seqkit stats ${i} >> ../../../annotation/seqkit/masurca/stats_before_filter.txt
+    seqkit stats ../../../annotation/seqkit/masurca/$idi.filtered.fasta >> ../../../annotation/seqkit/masurca/stats_after_filter.masurca.txt
 done
 
 
 # Megahit -----
 cd ../megahit
-for i in *.megahit.final.fasta
-do id=$(echo $i | sed 's/.final.fasta//1')
-    echo "Now reading ${i}"
-    seqkit seq --min-len 500 ${i} > ../../../annotation/seqkit/megahit/$id.filtered.fasta
+for j in *.megahit.final.fasta
+do idj=$(echo $j | sed 's/.final.fasta//1')
+    echo "[Now filtering ${j}]"
+    seqkit seq --min-len 500 ${j} > ../../../annotation/seqkit/megahit/$idj.filtered.fasta
+    echo "[Now creating stats on filtered fasta files]"
+    seqkit stats ${j} >> ../../../annotation/seqkit/megahit/stats_before_filter.txt
+    seqkit stats ../../../annotation/seqkit/megahit/$idj.filtered.fasta >> ../../../annotation/seqkit/megahit/stats_after_filter.megahit.txt
 done
 
-# Reset to assembly directory
+# Reset to assembly directory -----
 cd ..
-pwd
+echo "Directory is reset back to" | tr '\n' ' ' && pwd
 
 }
 
