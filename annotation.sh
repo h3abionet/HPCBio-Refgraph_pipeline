@@ -178,7 +178,7 @@ cd ${OPT_d}
 echo "Input directory is set to" | tr '\n' ' ' && pwd
 
 # ----- Creat Blast database from GRC38.decoy.hla -----
-makeblastdb -in ../GRCh38 -parse_seqids -title "GRCh38.decoy.hla" -dbtype nucl
+ makeblastdb -in ../GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa -parse_seqids -title "GRCh38.decoy.hla" -dbtype nucl
 
 #Building a new DB, current time: 09/03/2021 18:47:07
 #New DB name:   /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021/GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa
@@ -187,6 +187,9 @@ makeblastdb -in ../GRCh38 -parse_seqids -title "GRCh38.decoy.hla" -dbtype nucl
 #Keep MBits: T
 #Maximum file size: 1000000000B
 #Adding sequences from FASTA; added 3366 sequences in 30.3125 seconds.
+
+# ----- Creat Blast database from GRC38.decoy.hla -----
+makeblastdb -in ../GRCh38.p0/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna -parse_seqids -title "GRCh38.p0.no.decoy.hla" -dbtype nucl
 
 }
 
@@ -206,17 +209,21 @@ blastGRCh38 ()
 module load BLAST+/2.10.1-IGB-gcc-8.2.0
 
 # Set working directory -----
-cd ${OPT_d}/annotation
+cd ${OPT_d}
 echo "Directory is set to" | tr '\n' ' ' && pwd
 
 # Make a directory for blast ------
-mkdir -p blast/masurca
-mkdir -p blast/megahit
+mkdir -p annotation/blast/masurca
+mkdir -p annotation/blast/megahit
 
 echo "Start of BLASTN process"
 
 # Masurca -----
-cd seqkit/masurca
+
+# Set directory to GRCh38 ------
+cd ../GRCh38/
+
+# BLAST against GRCh38.decoy.hla ------
 
 # In order for the following codes to run properly without warning, you need to create a hidden file named .ncbirc and
 # put it inside seqkit/masurca and seqkit/megahit
@@ -235,46 +242,59 @@ echo "RUNNING HG03563.masurca.filtered.fasta"
 
 start=`date +%s`
 # Restrict number of hits -----
-    blastn -db ../../../../GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa \
-    -query HG03563.masurca.filtered.fasta\
-    -out ../../blast/masurca/blast_HG03563.masurca.filtered-limit.asn \
+    blastn -db GRCh38_full_analysis_set_plus_decoy_hla.fa \
+    -query ../results/annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
+    -out ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.asn \
     -outfmt 11 \
-    -max_target_seqs 50 \
+    -max_target_seqs 5 \
     -max_hsps 10 \
     -evalue 1e-5 \
     -perc_identity 90
 
 echo "Convert blast archive .asn to tabular format"
 
-blast_formatter -archive ../../blast/masurca/blast_HG03563.masurca.filtered-limit.asn \
--outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" > ../../blast/masurca/blast_HG03563.masurca.filtered-limit.tsv
+blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.asn \
+-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.tsv
 
 end=`date +%s`
 runtime=$((end-start))
 echo "$runtime"
 
+echo "Blasted HG03563.filtered.fasta against GRCh38.decoy.hla"
 
+
+# BLAST against GRCh38.p0.no.decoy.hla ------
 start=`date +%s`
-# Without limiting -----
-    blastn -db ../../../../GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa \
-    -query HG03563.masurca.filtered.fasta\
-    -out ../../blast/masurca/blast_HG03563.masurca.filtered.asn \
+
+# Download the ref sequence ------
+# mkdir GRCh38.p0
+# wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+
+# Set directory to GRCh38.p0 ------
+cd ../GRCh38.p0/
+
+# Restrict number of hits -----
+    blastn -db GCA_000001405.15_GRCh38_no_alt_analysis_set.fna \
+    -query ../results/annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
+    -out ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.asn \
     -outfmt 11 \
+    -max_target_seqs 5 \
+    -max_hsps 10 \
     -evalue 1e-5 \
     -perc_identity 90
 
 echo "Convert blast archive .asn to tabular format"
 
-blast_formatter -archive ../../blast/masurca/blast_HG03563.masurca.filtered.asn \
--outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" > ../../blast/masurca/blast_HG03563.masurca.filtered.tsv
+blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.asn \
+-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.tsv
 
 end=`date +%s`
 runtime=$((end-start))
 echo "$runtime"
 
-#   echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,sblastnames,mismatch,gapopen,qstart,qend,qlen sstart send slen" | tr ',' '\t'| cat - ../blast/masurca/blast_HG03563.filtered.0.asn > ../blast/masurca/blast_HG03563.filtered.tsv
-  # rm ../../blast/masurca/blast_HG03563.filtered.0.tsv
-   echo "Blasted HG03563.filtered.fasta"
+echo "Blasted HG03563.filtered.fasta against GRCh38.p0.no.decoy.hla"
    
 echo "End of BLASTN process"
 }
@@ -298,7 +318,7 @@ main()
     setup
     #filter
     #blastdbGRCh38
-    blastGRCh38
+   blastGRCh38
 }
 
 # Run main function
