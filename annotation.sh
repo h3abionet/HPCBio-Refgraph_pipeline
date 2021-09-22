@@ -126,6 +126,8 @@ module purge
 # Load what we need -----
 module load seqkit/0.12.1
 module load BLAST+/2.10.1-IGB-gcc-8.2.0
+module load RepeatMasker/4.1.2-p1-IGB-gcc-8.2.0-Perl-5.28.1
+module load quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1
 
 echo "- Necessary modules are loaded"
 
@@ -224,9 +226,6 @@ blastn.GRCh38 ()
 {
 
 # ----- Run blastn on filtered sequences from previous step ------
-
-# ----- Load necessary modules ------ 
-module load BLAST+/2.10.1-IGB-gcc-8.2.0
 
 # Set working directory -----
 cd ${OPT_d}
@@ -347,9 +346,6 @@ blastn.CHM13 ()
 
 # ----- Run blastn on filtered sequences from previous step ------
 
-# ----- Load necessary modules ------ 
-module load BLAST+/2.10.1-IGB-gcc-8.2.0
-
 # Set working directory -----
 cd ${OPT_d}
 echo "Directory is set to:"  |  tr '\n' ' ' && pwd 
@@ -373,7 +369,7 @@ echo "[Running BLAST+ on HG03563.masurca.filtered.fasta]"
 start=`date +%s`  # record start time 
 
 # Run blast ------
-    blastn -db CHM13.v1.1_GRCh38.p13.chrY.fna\
+    blastn -db CHM13.v1.1_GRCh38.p13.chrY.fna \
     -query ../results/annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
     -out ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.asn \
     -outfmt 11 \
@@ -399,6 +395,48 @@ echo "End of BLASTN CHM13 process"
 
 }
 
+
+##############################################################################
+##																			                                    ##
+##			        STEP 7: RUN REPEAT MASKER ON FILTERED READS                 ##
+##																			                                    ##	
+##############################################################################
+
+repeat.masker ()
+{
+
+# ----- Run RepeatMasker on filtered sequences from previous step ------
+
+# Set working directory -----
+cd ${OPT_d}
+echo "Directory is set to" | tr '\n' ' ' && pwd
+
+# Make a directory for blast ------
+mkdir -p annotation/RepeatMasker/masurca
+mkdir -p annotation/RepeatMasker/megahit
+
+echo "[Start of RepeatMasker Process]"
+
+# Masurca -----
+
+echo "[Running RepeatMasker on HG03563.masurca.filtered.fasta]"
+
+start=`date +%s`  # record start time 
+
+# Run Repeat Masker ------
+RepeatMasker annotation/seqkit/masurca/HG03563.masurca.filtered.fasta -dir annotation/RepeatMasker/masurca
+
+end=`date +%s`
+runtime=$((end-start))
+runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
+echo "It took $runtime minutes for RepeatMasker to run [HG03563.filtered.fasta]"
+
+
+echo "End of RepeatMasker process"
+
+}
+
+
 ##############################################################################
 ##																			                                    ##
 ##								                 MAIN                                     ##
@@ -420,7 +458,8 @@ main()
   # blastdb.GRCh38
   # blastn.GRCh38
   # blastdb.CHM13
-   blastn.CHM13
+  # blastn.CHM13
+  repeat.masker
 }
 
 # Run main function
