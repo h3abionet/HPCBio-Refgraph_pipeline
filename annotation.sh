@@ -31,12 +31,7 @@ function HELP {
   echo "${BOLD}Help Documentation for the HPCBio UIUC Annotation Pipeline${NORM}"
   echo ""
   echo "The Following Options Must Be Specified:"
-  echo "${REV}-d${NORM}   The full path to the main results directory${NORM} (Required)"  
-  #echo "${REV}-s${NORM}   TRUE for single-end and FALSE for paired-end${NORM}"
-  #echo "${REV}-f${NORM}   Adapter/primer sequence to be trimmed from R1${NORM}"
-  #echo "${REV}-r${NORM}   Adapter/primer sequence to be trimmed from R2${NORM}"
-  #echo "${REV}-l${NORM}   DADA2 truncation length for R1${NORM}"
-  #echo "${REV}-n${NORM}   DADA2 truncation length for R2${NORM}"
+  echo "${REV}-d${NORM}   The full path to the main results directory${NORM} (Required)"
   echo "${REV}-h${NORM}   Displays this help message without complaints (Optional)"
   echo ""
   echo "[ ${NORM}${BOLD}Example:${NORM} sbatch annotation.sh -d /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021/results/ ]"
@@ -56,26 +51,11 @@ fi
 
 
 # Parse the inputs
-while getopts :d:s:f:r:l:n:h FLAG; do
+while getopts :d:h FLAG; do
   case $FLAG in
     d)  #set option "d"
       OPT_d=$OPTARG
       ;;
-    #s)  #set option "s"
-     # OPT_s=$OPTARG
-      #;;
-    #f)  #set option "f"
-     # OPT_f=$OPTARG
-      #;;
-   # r)  #set option "r"
-    #  OPT_r=$OPTARG
-     # ;;
-    #l)  #set option "l"
-     # OPT_l=$OPTARG
-      #;;
-    #n)  #set option "n"
-     # OPT_n=$OPTARG
-      #;;
      h)  #set option "h"
       OPT_h=$OPTARG
       HELP
@@ -94,21 +74,8 @@ if [[ -z "$OPT_d" ]]; then
         exit 1
 fi
 
-#if [[ -z "$OPT_s" ]]; then
-#	echo "Single-end TRUE or FALSE not specified, aborting script"
-#	exit 1
-#fi
 
-#if [[ -z "$OPT_f" ]]; then
-#	echo "No adapter sequence for read 1 specified, aborting script"
-#	exit 1
-#fi
-
-#if [[ -z "$OPT_l" ]]; then
-#	echo "No truncation length for read 1 specified, aborting script"
-#	exit 1
-#fi
-
+startall=`date +%s`  # record start time 
 
 ##############################################################################
 ##																			                                    ##
@@ -127,7 +94,6 @@ module purge
 module load seqkit/0.12.1
 module load BLAST+/2.10.1-IGB-gcc-8.2.0
 module load RepeatMasker/4.1.2-p1-IGB-gcc-8.2.0-Perl-5.28.1
-module load quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1
 
 echo "- Necessary modules are loaded"
 
@@ -177,7 +143,7 @@ echo "End of Filtering Process"
 ##																			                                    ##	
 ##############################################################################
 
-blastdb.GRCh38 ()
+blastdbGRCh38 ()
 {
 
 # ----- Set working directory -----
@@ -222,7 +188,7 @@ makeblastdb -in ../GRCh38.p0/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna -pa
 ##																			                                    ##	
 ##############################################################################
 
-blastn.GRCh38 ()
+blastnGRCh38 ()
 {
 
 # ----- Run blastn on filtered sequences from previous step ------
@@ -315,7 +281,7 @@ echo "End of BLASTN GRCh38 process"
 ##																		                                    	##	
 ##############################################################################
 
-blastdb.CHM13()
+blastdbCHM13()
 {
 
 # ----- Creat Blast database from CHM13 [GCA_009914755.3_CHM13_T2T_v1.1] + chrY of GRCh38.p13 [GCA_000001405.28_GRCh38.p13] -----
@@ -341,7 +307,7 @@ makeblastdb -in ../CHM13.v1.1_GRCh38.p13.chrY/CHM13.v1.1_GRCh38.p13.chrY.fna -pa
 ##																			                                    ##	
 ##############################################################################
 
-blastn.CHM13 ()
+blastnCHM13 ()
 {
 
 # ----- Run blastn on filtered sequences from previous step ------
@@ -402,7 +368,7 @@ echo "End of BLASTN CHM13 process"
 ##																			                                    ##	
 ##############################################################################
 
-repeat.masker ()
+repeatmasker ()
 {
 
 # ----- Run RepeatMasker on filtered sequences from previous step ------
@@ -437,6 +403,116 @@ echo "End of RepeatMasker process"
 }
 
 
+
+##############################################################################
+##																			                                    ##
+##			       STEP 8: RUN QUAST ON FILTERED & MASKED READS                ##
+##																			                                    ##	
+##############################################################################
+
+quast ()
+{
+
+
+# Load quast ------
+module purge
+module load quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1
+
+# ----- Run RepeatMasker on filtered sequences from previous step ------
+
+# Set working directory -----
+cd ${OPT_d}
+echo "Directory is set to" | tr '\n' ' ' && pwd
+
+# Make a directory for blast ------
+mkdir -p annotation/QUAST/HG03563
+
+echo "[Start of RepeatMasker Process]"
+
+# Masurca -----
+
+echo "[Running QUAST on HG03563.masurca.filtered.fasta.masked"
+
+start=`date +%s`  # record start time 
+
+# Run Repeat Masker ------
+quast.py annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
+--output-dir annotation/QUAST/HG03563 \
+--threads 2 \
+
+
+end=`date +%s`
+runtime=$((end-start))
+runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
+echo "It took $runtime minutes for QUAST to run [HG03563.filtered.fasta]"
+
+
+echo "End of QUAST process"
+
+}
+
+ 
+##############################################################################
+##																			##
+##			      STEP 9: RUN BLAST ON FILTERED & MASKED READS              ##
+##																			##	
+##############################################################################
+
+blastncontam ()
+{
+
+# ----- Run blastn on filtered sequences from previous step ------
+
+# Set working directory -----
+cd ${OPT_d}
+echo "Directory is set to:"  |  tr '\n' ' ' && pwd 
+
+# Make a directory for blast ------
+mkdir -p annotation/blast-contam/masurca
+mkdir -p annotation/blast-contam/megahit
+
+echo "[Start of BLASTN for contamination detetcion Process]"
+
+# Load blast database ------
+module load ncbi-blastdb/20201212
+
+# Masurca -----
+
+# BLAST against built in blast database ------
+
+echo "[Running BLASTN on HG03563.masurca.filtered.fasta]"
+
+start=`date +%s`  # record start time 
+
+# Run blast ------
+    blastn -db nt \
+    -query annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
+    -out annotation/blast-contam/masurca/blast_HG03563.masurca.asn \
+    -outfmt 11 \
+    -max_target_seqs 5 \
+    -max_hsps 10 \
+    -evalue 1e-5 \
+    -perc_identity 90
+
+echo "Convert blast archive .asn to tabular format"
+
+# Convert blast archive to tabular -----
+blast_formatter -archive annotation/blast-contam/masurca/blast_HG03563.masurca.asn \
+-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> annotation/blast-contam/masurca/blast_HG03563.masurca.tsv
+
+end=`date +%s`
+runtime=$((end-start))
+runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
+echo "It took $runtime minutes to blast [HG03563.filtered.fasta.masked] against [nt]"
+
+echo "Blasted HG03563.filtered.fasta.masked against nt"
+
+echo "End of blastn.contam process"
+
+}
+
+
 ##############################################################################
 ##																			                                    ##
 ##								                 MAIN                                     ##
@@ -455,12 +531,18 @@ main()
 	echo "*** RUNNING ${runtype} ANNOTATION PIPELINE ***"
   setup
   #filter
-  # blastdb.GRCh38
-  # blastn.GRCh38
-  # blastdb.CHM13
-  # blastn.CHM13
-  repeat.masker
+  # blastdbGRCh38
+  # blastnGRCh38
+  # blastdbCHM13
+  # blastnCHM13
+  #repeatmasker
+  #quast
+  blastncontam
 }
 
 # Run main function
 main
+
+endall=`date +%s`
+runtimeall=$( echo "scale=2;$((endall-startall)) / 60" | bc )
+echo "It took $runtimeall minutes to annotate [HG03563.fasta]"
