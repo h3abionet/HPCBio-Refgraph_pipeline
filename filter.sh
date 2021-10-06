@@ -261,8 +261,8 @@ cd ../GRCh38.p0/
 echo "Convert blast archive .asn to tabular format"
 
 blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.asn \
--outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.txt
+-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.tsv
 
 end=`date +%s`
 runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
@@ -347,8 +347,8 @@ start=`date +%s`  # record start time
 echo "Convert blast archive .asn to tabular format"
 
 blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.asn \
--outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-> ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.txt
+-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.tsv
 
 end=`date +%s`
 runtime=$((end-start))
@@ -390,9 +390,7 @@ echo "[Running RepeatMasker on HG03563.masurca.filtered.fasta]"
 start=`date +%s`  # record start time 
 
 # Run Repeat Masker ------
-RepeatMasker -species human \
-annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
--dir annotation/RepeatMasker/masurca
+RepeatMasker annotation/seqkit/masurca/HG03563.masurca.filtered.fasta -dir annotation/RepeatMasker/masurca
 
 end=`date +%s`
 runtime=$((end-start))
@@ -500,8 +498,8 @@ echo "Convert blast archive .asn to tabular format"
 
 # Convert blast archive to tabular -----
 blast_formatter -archive annotation/blast-contam/masurca/blast_HG03563.masurca.asn \
--outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-> annotation/blast-contam/masurca/blast_HG03563.masurca.txt
+-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> annotation/blast-contam/masurca/blast_HG03563.masurca.tsv
 
 end=`date +%s`
 runtime=$((end-start))
