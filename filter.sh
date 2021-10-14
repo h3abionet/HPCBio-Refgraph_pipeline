@@ -12,7 +12,7 @@
 
 
 
-# HPCBio UIUC Annotation pipeline; Created by Negin Valizadegan Sep 2, 2021; valizad2@illinois.edu
+# HPCBio UIUC Annotation pipeline (Filtering); Created by Negin Valizadegan Sep 2, 2021; valizad2@illinois.edu
 
 ##############################################################################
 ##																		                                    	##
@@ -28,7 +28,7 @@ REV=`tput smso`
 # Help ------
 function HELP {
   echo ""
-  echo "${BOLD}Help Documentation for the HPCBio UIUC Annotation Pipeline${NORM}"
+  echo "${BOLD}Help Documentation for the HPCBio UIUC Annotation (Filtering) Pipeline${NORM}"
   echo ""
   echo "The Following Options Must Be Specified:"
   echo "${REV}-d${NORM}   The full path to the main results directory${NORM} (Required)"
@@ -121,8 +121,6 @@ mkdir -p annotation/seqkit/megahit
 echo "Start of filtering process masurca"
 
 # Masurca -----
-cd masurca
-
 echo "[Removing reads with length < 500]"
 
 seqkit seq --min-len 500 --remove-gaps assembly/Final-Assembly/HG03563.masurca.final.fasta > annotation/seqkit/masurca/HG03563.filtered.fasta
@@ -261,8 +259,8 @@ cd ../GRCh38.p0/
 echo "Convert blast archive .asn to tabular format"
 
 blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.asn \
--outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.tsv
+-outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.p0.no.decoy.hla.txt
 
 end=`date +%s`
 runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
@@ -347,8 +345,8 @@ start=`date +%s`  # record start time
 echo "Convert blast archive .asn to tabular format"
 
 blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.asn \
--outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-> ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.tsv
+-outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.CHM13.v1.1_GRCh38.p13.chrY.fna.txt
 
 end=`date +%s`
 runtime=$((end-start))
@@ -390,7 +388,9 @@ echo "[Running RepeatMasker on HG03563.masurca.filtered.fasta]"
 start=`date +%s`  # record start time 
 
 # Run Repeat Masker ------
-RepeatMasker annotation/seqkit/masurca/HG03563.masurca.filtered.fasta -dir annotation/RepeatMasker/masurca
+RepeatMasker -species human \
+annotation/seqkit/masurca/HG03563.masurca.filtered.fasta \
+-dir annotation/RepeatMasker/masurca
 
 end=`date +%s`
 runtime=$((end-start))
@@ -498,8 +498,8 @@ echo "Convert blast archive .asn to tabular format"
 
 # Convert blast archive to tabular -----
 blast_formatter -archive annotation/blast-contam/masurca/blast_HG03563.masurca.asn \
--outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-> annotation/blast-contam/masurca/blast_HG03563.masurca.tsv
+-outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> annotation/blast-contam/masurca/blast_HG03563.masurca.txt
 
 end=`date +%s`
 runtime=$((end-start))
