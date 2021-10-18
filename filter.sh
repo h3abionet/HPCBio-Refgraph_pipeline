@@ -94,6 +94,7 @@ module purge
 module load seqkit/0.12.1
 module load BLAST+/2.10.1-IGB-gcc-8.2.0
 module load RepeatMasker/4.1.2-p1-IGB-gcc-8.2.0-Perl-5.28.1
+module load Kraken2/2.0.8-beta-IGB-gcc-4.9.4
 
 echo "- Necessary modules are loaded"
 
@@ -225,9 +226,9 @@ start=`date +%s`  # record start time
 
 echo "[Convert BLAST Archive (.asn) to Tabular Format]"
 
-#blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.asn \
-#-outfmt "7 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
-#> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.tsv
+blast_formatter -archive ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.asn \
+-outfmt "6 qseqid sseqid stitle pident length evalue qcovs bitscore sblastnames mismatch gapopen qstart qend qlen sstart send slen" \
+> ../results/annotation/blast/masurca/blast_HG03563.masurca.GRCh38.decoy.hla.tsv
 
 end=`date +%s` # record finish time 
 runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
@@ -413,7 +414,6 @@ echo "End of RepeatMasker process"
 quast ()
 {
 
-
 # Load quast ------
 module purge
 module load quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1
@@ -454,7 +454,7 @@ echo "End of QUAST process"
  
 ##############################################################################
 ##																			##
-##			      STEP 9: RUN BLAST ON FILTERED & MASKED READS              ##
+##			      STEP 9: RUN BLAST ON FILTERED READS              ##
 ##																			##	
 ##############################################################################
 
@@ -515,6 +515,41 @@ echo "End of blastn.contam process"
 
 ##############################################################################
 ##																			                                    ##
+##			           STEP 10: RUN KRAKEN ON FILTERED READS                    ##
+##																			                                    ##	
+##############################################################################
+
+kraken ()
+{
+
+# Set working directory -----
+cd ${OPT_d}
+echo "Directory is set to" | tr '\n' ' ' && pwd
+
+
+# Create a directory for outputs ----
+mkdir -p annotation/kraken/masurca
+mkdir -p annotation/kraken/megahit
+
+echo "Start of kraken process masurca"
+
+# Masurca -----
+
+# Run Kraken ------
+kraken2 --use-names --threads 6 --quick   \
+--report annotation/kraken/masurca/HG03563_kraken2_report.txt \
+--classified-out annotation/kraken/masurca/HG03563_masurca_kraken2_classified.fasta \
+--unclassified-out annotation/kraken/masurca/HG03563_masurca_kraken2_unclassified.fasta \
+--db /home/groups/h3abionet/RefGraph/data/kraken2/pluspf_20200919 \
+annotation/seqkit/masurca/HG03563.masurca.filtered.fasta > annotation/kraken/masurca/HG03563_masurca_kraken2_output.txt
+
+echo "End of kraken process masurca"
+
+}
+
+
+##############################################################################
+##																			                                    ##
 ##								                 MAIN                                     ##
 ##																		                                      ##
 ##############################################################################
@@ -537,7 +572,8 @@ main()
   # blastnCHM13
   #repeatmasker
   #quast
-  blastncontam
+  #blastncontam
+  kraken
 }
 
 # Run main function
