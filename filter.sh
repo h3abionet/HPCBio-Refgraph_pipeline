@@ -454,7 +454,7 @@ echo "End of RepeatMasker process"
 
 ##############################################################################
 ##																			                                    ##
-##			       STEP 8: RUN QUAST ON FILTERED & MASKED READS                ##
+##			       STEP 8: RUN QUAST ON FILTERED READS                          ##
 ##																			                                    ##	
 ##############################################################################
 
@@ -602,6 +602,7 @@ echo "It took $runtime minutes to run kraken on [$news.masurca.filtered.fasta]"
 echo "End of kraken process masurca"
 
 }
+
 
 ##############################################################################
 ##																			                                    ##
