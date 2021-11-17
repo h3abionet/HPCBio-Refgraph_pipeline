@@ -1,25 +1,30 @@
 #!/usr/bin/env nextflow
 
 /*Parameters that are specified at the command line or via config file*/
-params.genome1               = false         /*genome fasta file GRCh38, must specify complete path. Required parameters*/
-params.genome2               = false         /*genome fasta file GRCh38.p0, must specify complete path. Required parameters*/
-params.genome3               = false         /*genome fasta file, CHM13, must specify complete path. Required parameters*/
-params.krakendb              = false         /*kraken database file, must specify complete path. Required parameters*/
-params.samplePath            = false         /*input folder, must specify complete path. Required parameters*/
-params.taxdbPath             = false         /*location of blast taxa database. Required parameters*/
+params.genome1                = false          /*genome fasta file GRCh38, must specify complete path. Required parameters*/
+params.genome2                = false          /*genome fasta file GRCh38.p0, must specify complete path. Required parameters*/
+params.genome3                = false          /*genome fasta file, CHM13, must specify complete path. Required parameters*/
+params.krakendb               = false          /*kraken database file, must specify complete path. Required parameters*/
+params.samplePath             = false          /*input folder, must specify complete path. Required parameters*/
+params.taxdbPath              = false          /*location of blast taxa database. Required parameters*/
 
 /*Parameters to be used inside the pipeline */
-params.outputDir             = "./results"    /*output folder, must specify path from current directory. Required parameters*/
-params.assembler             = 'masurca'      /*options: megahit|masurca. Default is masurca*/
+params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameters*/
+params.assembler              = 'masurca'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for seqkit */
-params.min_read_length       = '500'          /*minimum length of read to be kept after trimming with seqkit for downstream analysis. Default is 500*/
+params.min_read_length        = '500'          /*minimum length of read to be kept after trimming with seqkit for downstream analysis. Default is 500*/
 
 /*Parameters for blast */
-params.max_target_seqs       = '5'            /*number of aligned sequences to keep in blast. Default is 5*/
-params.max_hsps              = '10'           /*maximum number of HSPs (alignments) to keep for any single query-subject pair in blast. Default is 10*/
-params.evalue                = '1e-5'         /*expect value (E) for saving hits in blast. Default is 1e-5*/
-params.perc_identity         = '90'           /*percentage of identical matches in blast. Default is 90*/
+params.max_target_seqs        = '5'            /*number of aligned sequences to keep in blast. Default is 5*/
+params.max_hsps               = '10'           /*maximum number of HSPs (alignments) to keep for any single query-subject pair in blast. Default is 10*/
+params.evalue                 = '1e-5'         /*expect value (E) for saving hits in blast. Default is 1e-5*/
+params.blastnt_pident         = '60'           /*percentage of identical matches in blast NT. Default is 60*/
+params.blastr_pident          = '90'           /*percentage of identical matches in blast huma reference. Default is 90*/
+params.blastnt_filter_pident  = '60'           /*filtering cut off for percentage of identical matches from blast NT. Default is 60*/
+params.blastnt_filter_length  = '100'          /*filtering cut off for alignment length from blast NT. Default is 100*/
+params.blastr_filter_pident   = '95'           /*filtering cut off for percentage of identical matches from blast ref genome. Default is 95*/
+params.blastr_filter_qcov     = '95'           /*filtering cut off for query coverage from blast ref genome. Default is 95*/
 
 /*Stage*/
 stage = "annotation"
@@ -231,9 +236,8 @@ process blastncontam {
     tuple val(id), file('*_kn_filtered.fasta') into kraken_filtered
     tuple val(id), file('blast_*_nt0.txt') optional true
     tuple val(id), file('blast_*_nt.txt')
-    tuple val(id), file('*_to_remove0.txt') optional true
-    tuple val(id), file('*_to_remove.txt') into remove_list_bl
-
+    tuple val(id), file('*_to_remove_nt.txt')
+    tuple val(id), file('*_ids_remove_nt.txt') into remove_list_bl
 
     script:
     """
@@ -250,7 +254,7 @@ process blastncontam {
     -max_target_seqs 1 \
     -max_hsps 1  \
     -evalue ${params.evalue} \
-    -perc_identity ${params.perc_identity} \
+    -perc_identity ${params.blastnt_pident} \
     -num_threads ${task.cpus}
 
     # Create headers for the blast file -----
@@ -260,9 +264,10 @@ process blastncontam {
     rm blast_${id}_nt0.txt
 
     # Filter the blast NT output to remove contamination ------
-    grep -E -v "primates|other sequences" blast_${id}_nt.txt > ${id}_to_remove0.txt # select non-matching primates to remove these
-    cut -f1 ${id}_to_remove0.txt > ${id}_to_remove.txt
-    rm ${id}_to_remove0.txt
+    grep -E -v "primates|other sequences" blast_${id}_nt.txt | \
+    awk -F"\t" '(\$4 > ${params.blastnt_filter_pident} && \$5 > ${params.blastnt_filter_length})' \
+     > ${id}_to_remove_nt.txt
+    cut -f1 ${id}_to_remove_nt.txt > ${id}_ids_remove_nt.txt
     """
 }
 
@@ -295,8 +300,11 @@ process blastn {
     tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla0.txt') optional true
     tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla.txt') 
     tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY0.txt') optional true
-    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY.txt') 
-
+    tuple val(id), file('blast_*.GRCh38.decoy.hla_to_filter.txt') 
+    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt') 
+    tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla_to_filter.txt') 
+    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt') 
+    
     script:
     """
     # Filter the fasta by the blast keep_list ------
@@ -312,13 +320,17 @@ process blastn {
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
-    -perc_identity ${params.perc_identity} \
+    -perc_identity ${params.blastr_pident} \
     -num_threads ${task.cpus}
 
     # Create headers for the blast file -----
     echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
     qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.GRCh38.decoy.hla0.txt > blast_${id}.GRCh38.decoy.hla.txt
     rm blast_${id}.GRCh38.decoy.hla0.txt
+
+    # Filter the blast (GRCh38) ------
+    awk -F"\t" '(\$4 > ${params.blastr_filter_pident} && \$7 > ${params.blastr_filter_qcov})' \
+    blast_${id}.GRCh38.decoy.hla.txt > blast_${id}.GRCh38.decoy.hla_to_filter.txt
     
     # Run blast (GRCh38.p0) ------
     blastn -db ${genome2} \
@@ -330,7 +342,7 @@ process blastn {
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
-    -perc_identity ${params.perc_identity} \
+    -perc_identity ${params.blastr_pident} \
     -num_threads ${task.cpus}
 
      # Create headers for the blast file -----
@@ -338,6 +350,9 @@ process blastn {
     qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.GRCh38.p0.no.decoy.hla0.txt > blast_${id}.GRCh38.p0.no.decoy.hla.txt
     rm blast_${id}.GRCh38.p0.no.decoy.hla0.txt
    
+    # Filter the blast (GRCh38.po) ------
+    awk -F"\t" '(\$4 > 95 && \$7 > 95)' blast_${id}.GRCh38.p0.no.decoy.hla.txt > blast_${id}.GRCh38.p0.no.decoy.hla_to_filter.txt
+
     # Run blast (CHM13) ------
     blastn -db ${genome3} \
     -query ${id}_blst_kn_filtered.fasta \
@@ -348,13 +363,16 @@ process blastn {
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
-    -perc_identity ${params.perc_identity} \
+    -perc_identity ${params.blastr_pident} \
     -num_threads ${task.cpus} 
 
      # Create headers for the blast file -----
     echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
     qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.CHM13.v1.1_GRCh38.p13.chrY0.txt > blast_${id}.CHM13.v1.1_GRCh38.p13.chrY.txt
     rm blast_${id}.CHM13.v1.1_GRCh38.p13.chrY0.txt
+
+    # Filter the blast (CHM13) ------
+    awk -F"\t" '(\$4 > 95 && \$7 > 95)' blast_${id}.CHM13.v1.1_GRCh38.p13.chrY.txt > blast_${id}.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt
 
     """ 
 }
