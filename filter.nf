@@ -1,15 +1,24 @@
 #!/usr/bin/env nextflow
 
+/*
+  LIST OF TOOLS USED IN THIS PIPLINE:
+  1. blastn        -->  BLAST+/2.10.1
+  2. seqkit        -->  seqkit/0.12.1
+  3. kraken2       -->  Kraken2/2.0.8
+  4. cd-hit        -->  CD-HIT/4.8.1
+*/
+
 /*Parameters that are specified at the command line or via config file*/
-params.genome1                = false          /*genome fasta file GRCh38, must specify complete path. Required parameters*/
-params.genome2                = false          /*genome fasta file GRCh38.p0, must specify complete path. Required parameters*/
-params.genome3                = false          /*genome fasta file, CHM13, must specify complete path. Required parameters*/
-params.krakendb               = false          /*kraken database file, must specify complete path. Required parameters*/
-params.samplePath             = false          /*input folder, must specify complete path. Required parameters*/
-params.taxdbPath              = false          /*location of blast taxa database. Required parameters*/
+params.genome1                = false          /*genome fasta file GRCh38, must specify complete path. Required parameter*/
+params.genome2                = false          /*genome fasta file GRCh38.p0, must specify complete path. Required parameter*/
+params.genome3                = false          /*genome fasta file, CHM13, must specify complete path. Required parameter*/
+params.krakendb               = false          /*kraken database file, must specify complete path. Required parameter*/
+params.samplePath             = false          /*input folder, must specify complete path. Required parameter*/
+params.taxdbPath              = false          /*location of blast taxa database. Required parameter*/
+params.skipcdhit              = false          /* If true, cdhit would not be run. Optional parameter*/
 
 /*Parameters to be used inside the pipeline */
-params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameters*/
+params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
 params.assembler              = 'masurca'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for seqkit */
@@ -25,9 +34,11 @@ params.blastnt_filter_pident  = '60'           /*filtering cut off for percentag
 params.blastnt_filter_length  = '100'          /*filtering cut off for alignment length from blast NT. Default is 100*/
 params.blastr_filter_pident   = '95'           /*filtering cut off for percentage of identical matches from blast ref genome. Default is 95*/
 params.blastr_filter_qcov     = '95'           /*filtering cut off for query coverage from blast ref genome. Default is 95*/
+params.cdhit_identity         = '0.9'          /*proportion of idenitity for clustering using cdhit. Default is 0.9*/
+params.cdhit_wordsize         = '7'            /*word size for cdhit. Default is 7*/
 
 /*Stage*/
-stage = "annotation"
+stage = "filter"
 
 /*Results path*/
 resultsPath = "${params.outputDir}/${stage}"
@@ -152,7 +163,7 @@ process filter_seqkit {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "seqkit/0.12.1"
-    publishDir             "${resultsPath}/seqkit/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/SeqKit/${params.assembler}/",mode:"copy"
 
     input:
     tuple val(id), file(fasta) from fasta_Ch1
@@ -168,7 +179,7 @@ process filter_seqkit {
   
     # Create seqkit stats before and after filtering ------
     seqkit stats ${fasta} > ${id}_filter_stats.txt
-    seqkit stats ${id}_minLength_${params.min_read_length}.fasta | sed -e '1d' >> ${id}_filter_stats.txt
+    seqkit stats ${id}_minLength_${params.min_read_length}.fasta | sed -e '1d' >> ${id}_filter_stats.tx
 
     """
 }
@@ -178,7 +189,7 @@ process filter_seqkit {
 /*
   2.1: RUN KRAKEN ON FILTERED READS 
 */
-process kraken {
+process kraken2 {
     tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -186,7 +197,7 @@ process kraken {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "Kraken2/2.0.8-beta-IGB-gcc-4.9.4"
-    publishDir             "${resultsPath}/kraken/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/Kraken2/${params.assembler}/",mode:"copy"
 
     input:
     tuple val(id), file(filtered_ln1) from filtered_ln_kraken
@@ -215,10 +226,11 @@ process kraken {
     cut -f2 ${id}_kraken2_output_filtered.txt > ${id}_to_keep.txt    
     """
 }
+
 /*
   2.2: RUN BLAST (NT) ON FILTERED READS 
 */
-process blastncontam {
+process blastcontam {
     tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -226,18 +238,19 @@ process blastncontam {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "BLAST+/2.10.1-IGB-gcc-8.2.0","ncbi-blastdb/20201212","seqkit/0.12.1"              
-    publishDir             "${resultsPath}/blast-contam/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/BLAST_Contam/${params.assembler}/",mode:"copy"
 
 
     input:
     tuple val(id), file(keep), file(filtered_ln2) from keep_list_kn.join(filtered_ln_blastnt) 
 
     output:
-    tuple val(id), file('*_kn_filtered.fasta') into kraken_filtered
+    tuple val(id), file('*_kn_filtered.fasta')
     tuple val(id), file('blast_*_nt0.txt') optional true
     tuple val(id), file('blast_*_nt.txt')
     tuple val(id), file('*_to_remove_nt.txt')
-    tuple val(id), file('*_ids_remove_nt.txt') into remove_list_bl
+    tuple val(id), file('*_ids_remove_nt.txt')
+    tuple val(id), file('*_blst_kn_filtered.fasta') into blast_kn_filtered, blast_kn_filtered2, blast_kn_filtered3
 
     script:
     """
@@ -268,13 +281,54 @@ process blastncontam {
     awk -F"\t" '(\$4 > ${params.blastnt_filter_pident} && \$5 > ${params.blastnt_filter_length})' \
      > ${id}_to_remove_nt.txt
     cut -f1 ${id}_to_remove_nt.txt > ${id}_ids_remove_nt.txt
+
+    # Filter the fasta by the blast keep_list ------
+    seqkit grep -i -v -f ${id}_ids_remove_nt.txt ${id}_kn_filtered.fasta > ${id}_blst_kn_filtered.fasta
+    
     """
+}
+
+/*
+  STEP 3: RUN CD-HIT ON FILTERED READS
+*/
+if (!params.skipcdhit) {
+process cdhit {
+    tag                    { id }
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   defaultCPU
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    module                 "CD-HIT/4.8.1-IGB-gcc-8.2.0"
+    publishDir             "${resultsPath}/CD-HIT/${params.assembler}/",mode:"copy"
+
+    input:
+    tuple val(id), file(filtered_kn_blst) from blast_kn_filtered
+
+    output:
+    tuple val(id), file('*_blst_kn_cdhit.fasta') into blast_kn_cdhit, blast_kn_cdhit2
+
+    script:
+    """
+    # Use cd-hit to cluster and remove redundancy ------
+    cd-hit-est \
+    -i ${filtered_kn_blst} \
+    -o ${id}_blst_kn_cdhit.fasta \
+    -c ${params.cdhit_identity} \
+    -n ${params.cdhit_wordsize} \
+    -T ${task.cpus}
+
+    """
+}
+
+} else {
+ blast_kn_filtered.into {blast_kn_cdhit;blast_kn_cdhit2}
 }
 
 /*
   STEP 4: RUN BLAST ON FILTERED READS (GRCh38, GRCh38.p0, CHM13) 
 */
-process blastn {
+process blastref {
     tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -282,10 +336,10 @@ process blastn {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "BLAST+/2.10.1-IGB-gcc-8.2.0","seqkit/0.12.1"
-    publishDir             "${resultsPath}/blast/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/BLAST/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(filtered_kn), file(remove_bl) from kraken_filtered.join(remove_list_bl)
+    tuple val(id), file(blast_kn_cdhit_filtered) from blast_kn_cdhit
     file genome1 from genome_file1
     file genome2 from genome_file2
     file genome3 from genome_file3
@@ -294,25 +348,21 @@ process blastn {
     file "*" from blast_db3_ch
 
     output:
-    tuple val(id), file('*_blst_kn_filtered.fasta') into blast_kn_filtered
     tuple val(id), file('blast_*.GRCh38.decoy.hla0.txt') optional true
     tuple val(id), file('blast_*.GRCh38.decoy.hla.txt') 
     tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla0.txt') optional true
     tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla.txt') 
     tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY0.txt') optional true
-    tuple val(id), file('blast_*.GRCh38.decoy.hla_to_filter.txt') 
-    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt') 
-    tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla_to_filter.txt') 
-    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt') 
-    
+    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY.txt') 
+    tuple val(id), file('blast_*.GRCh38.decoy.hla_to_filter.txt') into filter_GRCH38_decoy_hla
+    tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla_to_filter.txt') into filter_GRCH38_p0
+    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt') into filter_CHM13_GRCH38
+  
     script:
     """
-    # Filter the fasta by the blast keep_list ------
-    seqkit grep -i -v -f ${remove_bl} ${filtered_kn} > ${id}_blst_kn_filtered.fasta 
-    
     # Run blast (GRCh38) ------
     blastn -db ${genome1} \
-    -query ${id}_blst_kn_filtered.fasta \
+    -query ${blast_kn_cdhit_filtered} \
     -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
@@ -328,13 +378,13 @@ process blastn {
     qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.GRCh38.decoy.hla0.txt > blast_${id}.GRCh38.decoy.hla.txt
     rm blast_${id}.GRCh38.decoy.hla0.txt
 
-    # Filter the blast (GRCh38) ------
+    # Filter the blast (GRCh38.p0) ------
     awk -F"\t" '(\$4 > ${params.blastr_filter_pident} && \$7 > ${params.blastr_filter_qcov})' \
     blast_${id}.GRCh38.decoy.hla.txt > blast_${id}.GRCh38.decoy.hla_to_filter.txt
     
     # Run blast (GRCh38.p0) ------
     blastn -db ${genome2} \
-    -query ${id}_blst_kn_filtered.fasta \
+    -query ${blast_kn_cdhit_filtered} \
     -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
@@ -355,7 +405,7 @@ process blastn {
 
     # Run blast (CHM13) ------
     blastn -db ${genome3} \
-    -query ${id}_blst_kn_filtered.fasta \
+    -query ${blast_kn_cdhit_filtered} \
     -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
@@ -378,65 +428,39 @@ process blastn {
 }
 
 /*
-  STEP 5: RUN REPEAT MASKER ON FILTERED READS
-process repeatmasker {
+  STEP 5: FILTER FASTA FILE BASED ON BLAST STEP
+*/
+process final_filtering {
     tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "RepeatMasker/4.1.2-p1-IGB-gcc-8.2.0-Perl-5.28.1"
-    publishDir             "${resultsPath}/RepeatMasker/${params.assembler}/",mode:"copy"
+    module                 "seqkit/0.12.1"
+    publishDir             "${resultsPath}/Final-Filtered/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(filtered4) from filtered_file4
+    tuple val(id), file(blast_kn_cdhit_filtered2) from blast_kn_cdhit2
+    tuple val(id), file(filter_GRCH38) from filter_GRCH38_decoy_hla
+    tuple val(id), file(filter_GRCH38p0) from filter_GRCH38_p0
+    tuple val(id), file(filter_CHM13) from filter_CHM13_GRCH38
 
     output:
-    file '*'
+    tuple val(id), file('*_GRCH38_decoys_hla_Final_filter.fasta')
+    tuple val(id), file('*_GRCH38_p0_Final_filter.fasta')
+    tuple val(id), file('*_CHM13_Final_filter.fasta')
 
     script:
     """
-    # Run Repeat Masker ------
-    RepeatMasker -species human ${filtered4} -nolow
-
+    # Filter the fasta using blast output (GRCh38) ------
+    seqkit grep -i -v -f ${filter_GRCH38} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_decoys_hla_Final_filter.fasta
+    
+    # Filter the fasta using blast output (GRCh38.p0) ------
+    seqkit grep -i -v -f ${filter_GRCH38p0} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_p0_Final_filter.fasta
+    
+    # Filter the fasta using blast output (CHM13) ------
+    seqkit grep -i -v -f ${filter_CHM13} ${blast_kn_cdhit_filtered2} > ${id}_CHM13_Final_filter.fasta
+    
     """
 }
-
-/*
-  STEP 6: RUN QUAST ON FILTERED READS
-process quast {
-    tag                    { id }
-    executor               myExecutor
-    clusterOptions         params.clusterAcct 
-    cpus                   defaultCPU
-    queue                  params.myQueue
-    memory                 "$defaultMemory GB"
-    module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${resultsPath}/QUAST/${id}/",mode:"copy"
-
-    input:
-    tuple val(id), file(filtered5) from filtered_file5
-
-    output:
-    file '*'
-
-    script:
-    """
-    # Run QUAST ------
-    quast.py ${filtered5} \
-    --threads ${task.cpus}
-
-    """
-}
-*/
-
-/*
-  LIST OF TOOLS USED IN THIS PIPLINE:
-  1. blastn        -->  BLAST+/2.10.1
-  2. seqkit        -->  seqkit/0.12.1
-  2. kraken2       -->  Kraken2/2.0.8
-  4. repeatmasker  -->  RepeatMasker/4.1.2
-  5. quast         -->  quast/5.0.0
-*/
-
