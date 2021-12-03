@@ -15,7 +15,7 @@ params.genome3                = false          /*genome fasta file, CHM13, must 
 params.krakendb               = false          /*kraken database file, must specify complete path. Required parameter*/
 params.samplePath             = false          /*input folder, must specify complete path. Required parameter*/
 params.taxdbPath              = false          /*location of blast taxa database. Required parameter*/
-params.skipcdhit              = false          /* If true, cdhit would not be run. Optional parameter*/
+params.skipcdhit              = false          /* If set to true and used with flag --skipcdhit in terminal, cdhit would not be run. */
 
 /*Parameters to be used inside the pipeline */
 params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
@@ -291,7 +291,7 @@ process blastcontam {
 /*
   STEP 3: RUN CD-HIT ON FILTERED READS
 */
-if (!params.skipcdhit) {
+if (params.skipcdhit == 'false') {
 process cdhit {
     tag                    { id }
     executor               myExecutor
@@ -322,6 +322,7 @@ process cdhit {
 }
 
 } else {
+  
  blast_kn_filtered.into {blast_kn_cdhit;blast_kn_cdhit2}
 }
 
@@ -392,6 +393,7 @@ process blastref {
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
+
     -perc_identity ${params.blastr_pident} \
     -num_threads ${task.cpus}
 
