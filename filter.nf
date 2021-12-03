@@ -15,7 +15,7 @@ params.genome3                = false          /*genome fasta file, CHM13, must 
 params.krakendb               = false          /*kraken database file, must specify complete path. Required parameter*/
 params.samplePath             = false          /*input folder, must specify complete path. Required parameter*/
 params.taxdbPath              = false          /*location of blast taxa database. Required parameter*/
-params.skipcdhit              = false          /* If set to true and used with flag --skipcdhit in terminal, cdhit would not be run. */
+params.skipcdhit              = false          /* If set to true in config file, cdhit would not be run. */
 
 /*Parameters to be used inside the pipeline */
 params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
