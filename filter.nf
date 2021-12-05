@@ -34,7 +34,9 @@ params.blastnt_filter_pident  = '60'           /*filtering cut off for percentag
 params.blastnt_filter_length  = '100'          /*filtering cut off for alignment length from blast NT. Default is 100*/
 params.blastr_filter_pident   = '95'           /*filtering cut off for percentage of identical matches from blast ref genome. Default is 95*/
 params.blastr_filter_qcov     = '95'           /*filtering cut off for query coverage from blast ref genome. Default is 95*/
-params.cdhit_identity         = '0.9'          /*proportion of idenitity for clustering using cdhit. Default is 0.9*/
+
+/*Parameters for cdhit */
+params.cdhit_identity         = '0.9'          /*proportion of idenitity for clustering. Default is 0.9*/
 params.cdhit_wordsize         = '7'            /*word size for cdhit. Default is 7*/
 
 /*Stage*/
@@ -150,7 +152,7 @@ process blastdbCHM13 {
 }
 
 /*
-  STEP 1: FILTER BASED ON READ LENGHT
+  STEP 1: FILTER BASED ON READ LENGTH
 /*
   1.1 FILTER THE ASSEMBLY FILES 
   --- use seqkit to remove low read lengths ---
@@ -449,20 +451,20 @@ process final_filtering {
     tuple val(id), file(filter_CHM13) from filter_CHM13_GRCH38
 
     output:
-    tuple val(id), file('*_GRCH38_decoys_hla_Final_filter.fasta')
-    tuple val(id), file('*_GRCH38_p0_Final_filter.fasta')
-    tuple val(id), file('*_CHM13_Final_filter.fasta')
+    tuple val(id), file('*_GRCH38_decoys_hla_filter.final.fasta')
+    tuple val(id), file('*_GRCH38_p0_filter.final.fasta')
+    tuple val(id), file('*_CHM13_filter.final.fasta')
 
     script:
     """
     # Filter the fasta using blast output (GRCh38) ------
-    seqkit grep -i -v -f ${filter_GRCH38} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_decoys_hla_Final_filter.fasta
+    seqkit grep -i -v -f ${filter_GRCH38} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_decoys_hla_filter.final.fasta
     
     # Filter the fasta using blast output (GRCh38.p0) ------
-    seqkit grep -i -v -f ${filter_GRCH38p0} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_p0_Final_filter.fasta
+    seqkit grep -i -v -f ${filter_GRCH38p0} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_p0_filter.final.fasta
     
     # Filter the fasta using blast output (CHM13) ------
-    seqkit grep -i -v -f ${filter_CHM13} ${blast_kn_cdhit_filtered2} > ${id}_CHM13_Final_filter.fasta
+    seqkit grep -i -v -f ${filter_CHM13} ${blast_kn_cdhit_filtered2} > ${id}_CHM13_filter.final.fasta
     
     """
 }
