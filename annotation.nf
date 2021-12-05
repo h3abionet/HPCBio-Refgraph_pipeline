@@ -151,17 +151,17 @@ process cdhit {
     publishDir             "${resultsPath}/Cluster_CDHIT/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(merged) from merged_seqs
+    file(merged) from merged_seqs
 
     output:
-    tuple val(id), file('*_clustered.fasta') into clustered
+    file('clustered.fasta') into clustered
 
     script:
     """
     # Use cd-hit to cluster and remove redundancy ------
     cd-hit-est \
     -i ${merged} \
-    -o ${id}_clustered.fasta \
+    -o clustered.fasta \
     -c ${params.cdhit_identity} \
     -n ${params.cdhit_wordsize} \
     -T ${task.cpus}
