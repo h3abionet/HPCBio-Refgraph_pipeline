@@ -29,7 +29,7 @@ params.max_target_seqs        = '5'            /*number of aligned sequences to 
 params.max_hsps               = '10'           /*maximum number of HSPs (alignments) to keep for any single query-subject pair in blast. Default is 10*/
 params.evalue                 = '1e-5'         /*expect value (E) for saving hits in blast. Default is 1e-5*/
 params.blastnt_pident         = '60'           /*percentage of identical matches in blast NT. Default is 60*/
-params.blastr_pident          = '90'           /*percentage of identical matches in blast huma reference. Default is 90*/
+params.blastr_pident          = '90'           /*percentage of identical matches in blast human reference. Default is 90*/
 params.blastnt_filter_pident  = '60'           /*filtering cut off for percentage of identical matches from blast NT. Default is 60*/
 params.blastnt_filter_length  = '100'          /*filtering cut off for alignment length from blast NT. Default is 100*/
 params.blastr_filter_pident   = '95'           /*filtering cut off for percentage of identical matches from blast ref genome. Default is 95*/
@@ -95,6 +95,8 @@ process blastdbGRCh38 {
     
     script:
     """
+    start=`date +%s` # capture start time 
+    echo "Start of maker annotation"
     makeblastdb -in ${genome1} -parse_seqids -title "GRCh38.decoy.hla" -dbtype nucl
 
     """
@@ -395,7 +397,6 @@ process blastref {
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
-
     -perc_identity ${params.blastr_pident} \
     -num_threads ${task.cpus}
 

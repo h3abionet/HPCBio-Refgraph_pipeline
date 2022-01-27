@@ -8,10 +8,10 @@
 */
 
 /*Parameters that are specified at the command line or via config file*/
-params.genome1                = false          /*genome fasta file GRCh38, must specify complete path. Required parameter*/
-params.genome2                = false          /*genome fasta file GRCh38.p0, must specify complete path. Required parameter*/
-params.genome3                = false          /*genome fasta file, CHM13, must specify complete path. Required parameter*/
 params.samplePath             = false          /*input folder, must specify complete path. Required parameter*/
+params.samplePath1            = false          /*input fasta files path for GRCh38 + decoy + alt, must specify complete path. Required parameter*/
+params.samplePath2            = false          /*input fasta files path for GRCh38.p0, must specify complete path. Required parameter*/
+params.samplePath3            = false          /*input fasta files path for CHM13, must specify complete path. Required parameter*/
 
 /*Parameters to be used inside the pipeline */
 params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
@@ -34,24 +34,11 @@ defaultCPU                   = '9'
 defaultMemory                = '120'
 params.clusterAcct           = " -A h3bionet "
 
-/*Prepare input*/
-genome_file1                 = file(params.genome1)
-genome_file2                 = file(params.genome2)
-genome_file3                 = file(params.genome3)
-genomeStore1                 = genome_file1.getParent()
-genomeStore2                 = genome_file2.getParent()
-genomeStore3                 = genome_file3.getParent()
-
-// Sanity checks
-if( !genome_file1.exists() ) exit 1, "Missing reference genome file: ${genome_file1}"
-if( !genome_file2.exists() ) exit 1, "Missing reference genome file: ${genome_file2}"
-if( !genome_file3.exists() ) exit 1, "Missing reference genome file: ${genome_file3}"
-//if( params.assembler != "megahit" || params.assembler != "masurca" ) exit 1, "Unknown assembler: ${params.assembler}"
-
 /* Create channcel for input files */
-filtered_fasta_Ch = Channel.fromFilePairs("${params.samplePath}", size: 1)
-filtered_fasta_Ch2 = Channel.fromFilePairs("${params.samplePath}", size: 1)
-filtered_fasta_Ch3 = Channel.fromFilePairs("${params.samplePath}", size: 1)
+Channel.fromFilePairs("${params.samplePath}", size: 1).into { filtered_Ch;filtered_Ch2 }
+filtered_GRCH38_decoys_Ch3 = Channel.fromFilePairs("${params.samplePath1}", size: 1)
+filtered_GRCH38_p0_Ch3 = Channel.fromFilePairs("${params.samplePath2}", size: 1)
+filtered_CHM13_Ch3 = Channel.fromFilePairs("${params.samplePath3}", size: 1)
 
 /*
   STEP 1: RUN REPEAT MASKER ON FILTERED READS
@@ -67,7 +54,7 @@ process repeatmasker {
     publishDir             "${resultsPath}/RepeatMasker/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(fasta) from filtered_fasta_Ch 
+    tuple val(id), file(fasta) from filtered_Ch 
 
     output:
     tuple val(id), file('*.fasta.cat')
@@ -97,7 +84,7 @@ process quast {
     publishDir             "${resultsPath}/QUAST/${id}/",mode:"copy"
 
     input:
-    tuple val(id), file(fasta2) from filtered_fasta_Ch2
+    tuple val(id), file(fasta2) from filtered_Ch2 
 
     output:
     file '*'
@@ -124,15 +111,21 @@ process merge_reads {
     publishDir             "${resultsPath}/Merged_Reads/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(fasta3) from filtered_fasta_Ch3
+    tuple val(id), file(fasta3) from filtered_GRCH38_decoys_Ch3
+    tuple val(id), file(fasta33) from filtered_GRCH38_p0_Ch3 
+    tuple val(id), file(fasta333) from filtered_CHM13_Ch3 
 
     output:
-    file('merged_sequences.fasta') into merged_seqs
+    file('merged_sequences_GRCH38_decoys.fasta') into merged_seqs_GRCH38_decoys
+    file('merged_sequences_GRCH38_p0.fasta') into merged_seqs_GRCH38_p0
+    file('merged_sequences_CHM13.fasta') into merged_seqs_CHM13
 
     script:
     """
     # Combine all sequences ------
-    cat ${fasta3} >> merged_sequences.fasta
+    cat ${fasta3} >> merged_sequences_GRCH38_decoys.fasta
+    cat ${fasta33} >> merged_sequences_GRCH38_p0.fasta
+    cat ${fasta333} >> merged_sequences_CHM13.fasta
 
     """
 }
@@ -151,17 +144,39 @@ process cdhit {
     publishDir             "${resultsPath}/Cluster_CDHIT/${params.assembler}/",mode:"copy"
 
     input:
-    file(merged) from merged_seqs
+    file merged_GRCH38_decoys from merged_seqs_GRCH38_decoys
+    file merged_GRCH38_p0 from merged_seqs_GRCH38_p0
+    file merged_CHM13 from merged_seqs_CHM13
 
     output:
-    file('clustered.fasta') into clustered
+    file('clustered_GRCH38_decoys.fasta') into clustered_GRCH38_decoys
+    file('clustered_GRCH38_p0.fasta') into clustered_GRCH38_p0
+    file('clustered_CHM13.fasta') into clustered_CHM13
 
     script:
     """
     # Use cd-hit to cluster and remove redundancy ------
+
+    # GRCH38_decoys -----
     cd-hit-est \
-    -i ${merged} \
-    -o clustered.fasta \
+    -i ${merged_GRCH38_decoys} \
+    -o clustered_GRCH38_decoys.fasta \
+    -c ${params.cdhit_identity} \
+    -n ${params.cdhit_wordsize} \
+    -T ${task.cpus}
+
+    # GRCH38_p0 -----
+    cd-hit-est \
+    -i ${merged_GRCH38_p0} \
+    -o clustered_GRCH38_p0.fasta \
+    -c ${params.cdhit_identity} \
+    -n ${params.cdhit_wordsize} \
+    -T ${task.cpus}
+
+    # CHM13 -----
+    cd-hit-est \
+    -i ${merged_CHM13} \
+    -o clustered_CHM13.fasta \
     -c ${params.cdhit_identity} \
     -n ${params.cdhit_wordsize} \
     -T ${task.cpus}
