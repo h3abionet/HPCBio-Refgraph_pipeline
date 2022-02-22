@@ -3,7 +3,8 @@ data/*
 results/*
 work/*
 .nextflow/*
-
+# from Perl
+_Inline
 
 #now ignore specific files
 *.nextflow*
