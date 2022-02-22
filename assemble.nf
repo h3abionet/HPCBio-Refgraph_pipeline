@@ -148,7 +148,7 @@ process extract_improper {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Read-Prep/Improper"
+    publishDir             "${resultsPath}/Read-Prep/Improper",mode:"copy", overwrite: true
     
     input:
     tuple val(id), file(cram) from extract_unmapped_ch
@@ -192,7 +192,7 @@ process extract_unmapped {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Read-Prep/Unmapped"
+    publishDir             "${resultsPath}/Read-Prep/Unmapped",mode:"copy", overwrite: true
     
     input:
     tuple val(id), file(bam) from improper_unmapped_ch
@@ -273,7 +273,7 @@ process extract_clipped {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0","Python/3.7.2-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Read-Prep/Clipped"    
+    publishDir             "${resultsPath}/Read-Prep/Clipped",mode:"copy", overwrite: true
     
     input:
     tuple val(id), file(bam) from improper_clipped_ch
@@ -311,7 +311,7 @@ process merge_pairs {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "seqkit/0.12.1"
-    publishDir             "${resultsPath}/Read-Prep/Merged"
+    publishDir             "${resultsPath}/Read-Prep/Merged",mode:"copy", overwrite: true
  
     input:
     tuple val(id), file(unmapped), file(clipped) from fq_pe_unmapped_ch.join(fq_pe_clipped_ch)
@@ -363,7 +363,7 @@ process trimming {
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    publishDir             "${resultsPath}/Read-Prep/Trimmed"
+    publishDir             "${resultsPath}/Read-Prep/Trimmed",mode:"copy", overwrite: true
     module                 "fastp/0.20.0-IGB-gcc-4.9.4"
 
     input:
@@ -421,7 +421,7 @@ process fastqc_post {
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "FastQC/0.11.8-Java-1.8.0_152"
-    publishDir             "${resultsPath}/FASTQC-Posttrim"
+    publishDir             "${resultsPath}/FASTQC-Posttrim",mode:"copy", overwrite: true
 
     input:
     tuple val(id), file(pereads), file(sereads) from trim_fastqc
@@ -450,7 +450,7 @@ process megahit_assemble {
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
-    publishDir             "${resultsPath}/Raw-Assembly/megahit"
+    publishDir             "${resultsPath}/Raw-Assembly/megahit",mode:"copy",overwrite: true
     
     input:
     tuple val(name), file(pefastqs), file(sefastqs) from trim_megahit_ch
@@ -473,7 +473,7 @@ process megahit_assemble {
     megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]} \
         -r ${sefastqs[0]},${sefastqs[1]} \
         -o ${name}
-    # megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]}  -o ${name}.megahit_results
+    # megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]} -o ${name}.megahit_results
     """
     }
 }
@@ -490,7 +490,7 @@ process masurca_assemble {
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Raw-Assembly/masurca"
+    publishDir             "${resultsPath}/Raw-Assembly/masurca",mode:"copy", overwrite: true
 
     input:
     tuple val(name), file(pefastqs), file(sefastqs) from trim_masurca_ch
@@ -544,7 +544,7 @@ process assembly_rename {
     // TODO: a base perl install is fine, but we have this as a placeholder
     // just in case to remind us for Docker/Singularity
     // module                 "Perl/5.24.1-IGB-gcc-4.9.4"
-    publishDir             "${resultsPath}/Final-Assembly/${assembler}",mode:"copy"
+    publishDir             "${resultsPath}/Final-Assembly/${assembler}",mode:"copy", overwrite: true
 
     input:
     tuple val(name), val(assembler), file(assembly) from all_assemblies_rename_ch
@@ -571,7 +571,7 @@ process assembly_metrics {
     queue                  params.myQueue
     memory                 "12 GB"
     module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${resultsPath}/QUAST/",mode:"copy"
+    publishDir             "${resultsPath}/QUAST/", mode:"copy", overwrite: true
     errorStrategy          { task.exitStatus=4 ? 'ignore' : 'terminate' }
 
     input:
@@ -600,7 +600,7 @@ process aln_reads {
     clusterOptions         params.clusterAcct     
     memory                 "12 GB"
     module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/BWA-MEM/${assembler}",mode:"copy"
+    publishDir             "${resultsPath}/BWA-MEM/${assembler}",mode:"copy",overwrite: true
     errorStrategy          { task.attempt == 5 ? 'retry' : 'ignore' }
 
     input:
@@ -638,7 +638,7 @@ process MultiQC {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
-    publishDir             "${resultsPath}/MultiQC",mode:"copy"
+    publishDir             "${resultsPath}/MultiQC",mode:"copy",overwrite: true
  
     input:
     file('./QUAST/*') from metrics_multiqc_ch.collect().ifEmpty([])
