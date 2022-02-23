@@ -82,9 +82,10 @@ if [[ -z "$OPT_s" ]]; then
         exit 1
 fi
 
+
 ##############################################################################
 ##																			                                    ##
-##				                   STEP 0: LOAD MODULES                           ##
+##				                   STEP 1: SET UP                                 ##
 ##																			                                    ##	
 ##############################################################################
 
@@ -94,35 +95,50 @@ setup ()
 # Load modules ------
 module load MAKER/3.01.03-IGB-gcc-4.9.4-Perl-5.26.1-unthreaded
 
-# Create 3 control files needed for maker ----- (do not run if present; control files should be edited manually)
-# cd ${OPT_d}/../HPCBio-Refgraph_pipeline/
-# maker -CITL
-
-echo "Control ctl files are created if not already exist. They are usually needed to be manually modified."
-
-}
-
-
-##############################################################################
-##																			                                    ##
-##				                    STEP 1: RUN MAKER                             ##
-##																			                                    ##	
-##############################################################################
-
-maker ()
-{
-
 # Set working directory -----
 cd ${OPT_d}/annotation
 
-# Create output directory
+# Create output directory -----
 mkdir -p MAKER
-cd MAKER
-
-echo "Working directory is set to" | tr '\n' ' ' && pwd
 
 # Create a temp directory ------
 mkdir -p /scratch/valizad2/maker # change valizad2 to your username
+
+}
+
+# **** IMPORTANT: DO NOT RUN THIS STEP UNLESS YOU WANT TO CREATE NEW CONTROL FILES AND EDIT THEM ****
+##############################################################################
+##																			                                    ##
+##				             STEP 2: CREATE MAKER CONTROL FILES                   ## 
+##																			                                    ##	
+##############################################################################
+
+control.files ()
+{
+
+# Set working directory -----
+cd ${OPT_d}/../HPCBio-Refgraph_pipeline/
+
+# Create control files -----
+# maker -CITL
+
+echo "Control ctl files should be created using [maker -CITL] ONLY if they do not already exist"
+
+} 
+
+##############################################################################
+##																			                                    ##
+##				                    STEP 3: RUN MAKER                             ##
+##																			                                    ##	
+##############################################################################
+
+run.maker ()
+{
+
+# Set working directory -----
+cd ${OPT_d}/annotation/MAKER
+
+echo "Working directory is set to" | tr '\n' ' ' && pwd
 
 start=`date +%s` # capture start time 
 echo "Start of maker annotation"
@@ -146,6 +162,76 @@ echo "It took $runtime minutes to run maker on ${OPT_s}"
 
 }
 
+##############################################################################
+##																			                                    ##
+##				              STEP 4: MERGE MAKER OUTPUTS                         ##
+##																			                                    ##	
+##############################################################################
+
+maker.merge ()
+{
+
+# Set working directory -----
+cd ${OPT_d}/annotation/
+
+news=$(echo ${OPT_s} | sed 's/.fasta//g')
+
+cd MAKER/${news}.maker.output
+
+fasta_merge -d ${news}_master_datastore_index.log -o merged_fasta
+gff3_merge -d ${news}_master_datastore_index.log -o merged_gff
+
+echo "fasta and gff files from maker are merged and written to" | tr '\n' ' ' && pwd
+
+}
+
+##############################################################################
+##																			                                    ##
+##				             STEP 5: BUILD SHORTER IDS (NCBI)                     ##
+##																			                                    ##	
+##############################################################################
+
+create.map ()
+{
+
+# Set working directory -----
+cd ${OPT_d}/annotation/
+
+news=$(echo ${OPT_s} | sed 's/.fasta//g')
+
+cd MAKER/${news}.maker.output
+
+maker_map_ids --prefix PYU1_ --justify 6 ${news}.all.gff > ${news}.id.map
+
+echo "fasta and gff files from maker are merged and written to" | tr '\n' ' ' && pwd
+
+}
+
+##############################################################################
+##																			                                    ##
+##				                STEP 6: USE SHORTER IDS                           ##
+##																			                                    ##	
+##############################################################################
+
+rename.id ()
+{
+
+# Set working directory -----
+cd ${OPT_d}/annotation/
+
+news=$(echo ${OPT_s} | sed 's/.fasta//g')
+
+cd MAKER/${news}.maker.output
+
+# Rename fasta file based on the map ------
+map_fasta_ids ${news}.id.map merged_fasta
+
+# Rename gff file based on the map ------
+map_gff_ids ${news}.id.map merged_gff
+
+echo "fasta and gff files are renamed and saved to" | tr '\n' ' ' && pwd
+
+}
 
 ##############################################################################
 ##																			                                    ##
@@ -159,16 +245,19 @@ echo "It took $runtime minutes to run maker on ${OPT_s}"
 main ()
 {
 	# Determine whether running full pipeline or single step
-	#runtype="PARTIAL"
-  runtype="FULL"
+	runtype="PARTIAL"
+  #runtype="FULL"
   echo ""
 	echo "*** RUNNING ${runtype} ANNOTATION PIPELINE ***"
   
   setup
-  maker
-  
-  }
+  # control.files #(DO NOT RUN if control files are present)
+  #run.maker
+  maker.merge
+  # create.map
+  # rename.id
 
+  }
 
 # Run main function
 main

@@ -458,7 +458,7 @@ process final_filtering {
 
     script:
     """
-    # Filter the fasta using blast output (GRCh38) ------
+    # Filter the fasta using blast output (GRCh38) ------ [grap what is not in the blast output]
     seqkit grep -i -v -f ${filter_GRCH38} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_decoys_hla_filter.final.fasta
     
     # Filter the fasta using blast output (GRCh38.p0) ------

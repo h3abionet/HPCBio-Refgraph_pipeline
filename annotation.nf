@@ -12,6 +12,7 @@ params.samplePath             = false          /*input folder, must specify comp
 params.samplePath1            = false          /*input fasta files path for GRCh38 + decoy + alt, must specify complete path. Required parameter*/
 params.samplePath2            = false          /*input fasta files path for GRCh38.p0, must specify complete path. Required parameter*/
 params.samplePath3            = false          /*input fasta files path for CHM13, must specify complete path. Required parameter*/
+params.skipRepeatMasker       = false          /* If set to true in config file, RepeatMasker would not be run. */
 
 /*Parameters to be used inside the pipeline */
 params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
@@ -40,6 +41,7 @@ filtered_GRCH38_decoys_Ch3 = Channel.fromFilePairs("${params.samplePath1}", size
 filtered_GRCH38_p0_Ch3 = Channel.fromFilePairs("${params.samplePath2}", size: 1)
 filtered_CHM13_Ch3 = Channel.fromFilePairs("${params.samplePath3}", size: 1)
 
+if (params.skipRepeatMasker == 'false') {
 /*
   STEP 1: RUN REPEAT MASKER ON FILTERED READS
 */
@@ -70,8 +72,10 @@ process repeatmasker {
     """
 }
 
+}
+
 /*
-  STEP 2: RUN QUAST ON FILTERED READS
+  STEP 2-1: RUN QUAST ON FILTERED READS
 */
 process quast {
     tag                    { id }
@@ -87,13 +91,39 @@ process quast {
     tuple val(id), file(fasta2) from filtered_Ch2 
 
     output:
-    file '*'
+    file '*' into multiqc_ch
 
     script:
     """
     # Run QUAST ------
     quast.py ${fasta2} \
     --threads ${task.cpus}
+    """
+}
+
+/*
+  STEP 2-2: RUN MultiQC on QUAST
+*/
+process multiqc {
+    tag                    { id }
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   defaultCPU
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
+    publishDir             "${resultsPath}/MultiQC/",mode:"copy"
+
+    input:
+    file('./QUAST/*/*') from multiqc_ch.collect().ifEmpty([])
+
+    output:
+    file "multiqc*" 
+
+    script:
+    """
+    # Run MultiQC ------
+    multiqc .
 
     """
 }
