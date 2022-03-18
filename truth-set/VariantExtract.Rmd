@@ -1,0 +1,187 @@
+---
+title: "Variant extraction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(VariantAnnotation)
+#library(TVTB)
+library(RCurl)
+```
+
+# Load Data
+
+We are using data from the [recent HGSVC paper](https://science.sciencemag.org/content/early/2021/02/24/science.abf7117.abstract).  
+
+Data were downloaded both from [v1](ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC2/release/v1.0) and [v2](ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC2/release/v2.0) releases, focusing here on using v2.  Based on the README in the file, we picked the 'alt' data.
+
+```{r}
+vcf <- VcfFile("HGSVC2_rel_2.0/variants_freeze4_sv_insdel_alt.vcf.gz")
+hdr <- scanVcfHeader(vcf)
+hdr
+```
+
+```{r}
+for(i in names(meta(hdr))){
+  meta(hdr)[[i]] %>% show()
+}
+```
+
+What's in the info section?
+
+```{r}
+info_desc <- info(hdr)$Description
+names(info_desc) <- rownames(info(hdr))
+knitr::kable(info_desc)
+```
+
+
+What samples are there?
+
+```{r}
+samples(hdr)
+```
+
+Of these we want examples from African genomes.  
+
+## 1000g data
+
+Load in the IGSR data
+
+```{r}
+tg <- read_tsv('igsr_samples.tsv', col_types = 'cfcffffff', name_repair = 'universal')
+head(tg)
+```
+
+```{r}
+svs.1000g <- tg |> filter( Sample.name %in% samples(hdr) & Superpopulation.code == "AFR") |> droplevels()
+svs.1000g
+```
+
+11 samples; some of these are not on the African continent (are of African descent).  
+
+```{r}
+table(svs.1000g$Population.name)
+```
+
+<!-- ## Extract variants -->
+
+<!-- What we want are variants (specicially insertions) present only in African samples.  -->
+<!-- First 100 variants -->
+
+```{r}
+test <- readVcf(vcf)
+summary(test)
+```
+
+## INFO
+
+```{r}
+info(test)
+```
+
+## Filtering
+
+So we want to extract those samples that are African, and the variants associated with them.
+
+```{r}
+svs.1000g$Sample.name
+```
+
+```{r}
+# keep only insertions with a length greater than 1000
+ins.len <- function(x) {
+  unlist(info(x)$SVLEN >= 500)
+}
+
+# filter samples so they only keep these genotypes
+genos <- c("1|1", "1|0", "1|.", "0|1", ".|1")
+
+# sample filter, and get rid of empty genotypes '.|.'.  We may want to perform more filtering but this should be enough for now
+vcf <- VcfFile("HGSVC2_rel_2.0/variants_freeze4_sv_insdel_alt.vcf.gz", yieldSize = 10000)
+
+test <- readVcf(vcf)
+
+svp <- ScanVcfParam(samples = svs.1000g$Sample.name, trimEmpty = TRUE)
+
+if (file.exists('vcf.ins.afr.vcf.bgz')) {
+  unlink('vcf.ins.afr.vcf.bgz')
+}
+
+# pass 1
+vcf.ins.afr <- filterVcf(vcf, 
+          destination = "vcf.ins.afr.vcf",
+          filters = FilterRules(list(isIns = isInsertion,
+                                     insLen = ins.len)),
+          param = svp,
+          index = TRUE
+          )
+```
+
+Load back in.
+
+```{r}
+vcf.ins.afr <- readVcf('./vcf.ins.afr.vcf.bgz')
+summary(vcf.ins.afr)
+```
+
+We now need to filter those with the insertions
+
+```{r}
+hasIns <- apply(geno(vcf.ins.afr)$GT, 1, function(x) {
+  any(x %in% genos)
+})
+
+dim(vcf.ins.afr[hasIns])
+```
+
+So about 10k are African-specific, which is pretty interesting:
+
+```{r}
+dim(vcf.ins.afr[hasIns])[1]/dim(vcf.ins.afr)[1]
+```
+
+```{r}
+vcf.ins.afr <- vcf.ins.afr[hasIns]
+```
+
+Right about 2/3 of *all* insertions.
+
+```{r}
+range(unlist(info(vcf.ins.afr)$SVLEN))
+```
+
+```{r}
+ins.seqs <- rowRanges(vcf.ins.afr)$ALT
+names(ins.seqs) <- names(rowRanges(vcf.ins.afr))
+head(ins.seqs)
+```
+
+```{r}
+Biostrings::writeXStringSet(unlist(ins.seqs), 'insertions.fasta')
+```
+
+```{r}
+summary(vcf.ins.afr)
+```
+
+```{r}
+# we need a breakdown of lengths of the insertions, the samples, and the sequence
+insLens <- data.frame(
+  name = names(vcf.ins.afr),
+  width = unlist(info(vcf.ins.afr)$SVLEN),
+  chr = rowRanges(vcf.ins.afr) %>% seqnames() %>% as.character(),
+  pos = rowRanges(vcf.ins.afr) %>% start()
+  ) 
+# tmp[order(-tmp$width),]
+```
+
+```{r}
+# get genotypes
+gts <- as.data.frame(geno(vcf.ins.afr)$GT)
+gts$name <- row.names(gts)
+insLens %>% left_join(y = gts, by = "name") %>% arrange(desc(width)) %>% write_tsv("insertions.AFR.tsv")
+```
+
