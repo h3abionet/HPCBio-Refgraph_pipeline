@@ -19,7 +19,7 @@ params.skipcdhit              = false          /* If set to true in config file,
 
 /*Parameters to be used inside the pipeline */
 params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
-params.assembler              = 'masurca'      /*options: megahit|masurca. Default is masurca*/
+params.assembler              = 'megahit'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for seqkit */
 params.min_read_length        = '500'          /*minimum length of read to be kept after trimming with seqkit for downstream analysis. Default is 500*/
@@ -29,9 +29,9 @@ params.max_target_seqs        = '5'            /*number of aligned sequences to 
 params.max_hsps               = '10'           /*maximum number of HSPs (alignments) to keep for any single query-subject pair in blast. Default is 10*/
 params.evalue                 = '1e-5'         /*expect value (E) for saving hits in blast. Default is 1e-5*/
 params.blastnt_pident         = '60'           /*percentage of identical matches in blast NT. Default is 60*/
-params.blastr_pident          = '90'           /*percentage of identical matches in blast human reference. Default is 90*/
 params.blastnt_filter_pident  = '60'           /*filtering cut off for percentage of identical matches from blast NT. Default is 60*/
 params.blastnt_filter_length  = '100'          /*filtering cut off for alignment length from blast NT. Default is 100*/
+params.blastr_pident          = '90'           /*percentage of identical matches in blast human reference. Default is 90*/
 params.blastr_filter_pident   = '95'           /*filtering cut off for percentage of identical matches from blast ref genome. Default is 95*/
 params.blastr_filter_qcov     = '95'           /*filtering cut off for query coverage from blast ref genome. Default is 95*/
 
@@ -167,14 +167,14 @@ process filter_seqkit {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "seqkit/0.12.1"
-    publishDir             "${resultsPath}/SeqKit/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/SeqKit/${params.assembler}/",mode:"copy",overwrite: true
 
     input:
     tuple val(id), file(fasta) from fasta_Ch1
 
     output:
-    tuple val(id), file("*_minLength_${params.min_read_length}.fasta") into filtered_ln_kraken,filtered_ln_blastnt
-    file "${id}_filter_stats.txt" 
+    tuple val(id), file("*_minLength_${params.min_read_length}.fasta") into filtered_seqkit_for_kraken
+    file "${id}_filter_stats.txt" into all_stats
 
     script:
     """
@@ -183,10 +183,38 @@ process filter_seqkit {
   
     # Create seqkit stats before and after filtering ------
     seqkit stats ${fasta} > ${id}_filter_stats.txt
-    seqkit stats ${id}_minLength_${params.min_read_length}.fasta | sed -e '1d' >> ${id}_filter_stats.tx
-
-    """
+    seqkit stats ${id}_minLength_${params.min_read_length}.fasta | sed -e '1d' >> ${id}_filter_stats.txt
+    
+    """   
 }
+
+process merge_seqkit_stats {
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   defaultCPU
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    publishDir             "${resultsPath}/SeqKit/${params.assembler}/",mode:"copy",overwrite: true
+  
+  input:
+  file all_seqkit_stats from all_stats.collect()
+  
+  output:
+  file "All_seqkit_stats0.txt" optional true
+  file "All_seqkit_stats.txt"
+  
+  script:
+  """
+  sed '1~3d' ${all_seqkit_stats} | cat >> All_seqkit_stats0.txt
+   
+  # Add header -----
+  echo -e "file,format,type,num_seqs,sum_len,min_len,avg_len,max_len" \
+  | tr ',' '\t'| cat - All_seqkit_stats0.txt > All_seqkit_stats.txt
+  rm All_seqkit_stats0.txt
+
+  """
+}
+
 
 /*
   STEP 2: CONTAMINATION REMOVAL
@@ -200,11 +228,11 @@ process kraken2 {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "Kraken2/2.0.8-beta-IGB-gcc-4.9.4"
-    publishDir             "${resultsPath}/Kraken2/${params.assembler}/",mode:"copy"
+    module                 "Kraken2/2.0.8-beta-IGB-gcc-4.9.4","seqkit/0.12.1" 
+    publishDir             "${resultsPath}/Kraken2/${params.assembler}/",mode:"copy",overwrite: true
 
     input:
-    tuple val(id), file(filtered_ln1) from filtered_ln_kraken
+    tuple val(id), file(seqkit_filtered) from filtered_seqkit_for_kraken
     file krakendb from krakendb_file
 
     output:
@@ -214,6 +242,7 @@ process kraken2 {
     file "*_kraken2_output.txt"
     tuple val(id),file('*_kraken2_output_filtered.txt')
     tuple val(id),file('*_to_keep.txt') into keep_list_kn
+    tuple val(id), file('*_seqkit_kn_filtered.fasta') into seqkit_kn_filtered
 
     script:
     """
@@ -223,11 +252,15 @@ process kraken2 {
     --classified-out ${id}_kraken2_classified.fasta \
     --unclassified-out ${id}_kraken2_unclassified.fasta \
     --db ${krakendb} \
-    ${filtered_ln1} > ${id}_kraken2_output.txt
+    ${seqkit_filtered} > ${id}_kraken2_output.txt
 
     # Filter the output to remove contamination ------
     grep -E "Homo sapiens|Eukaryota|cellular organisms|unclassified|root" ${id}_kraken2_output.txt > ${id}_kraken2_output_filtered.txt
-    cut -f2 ${id}_kraken2_output_filtered.txt > ${id}_to_keep.txt    
+    cut -f2 ${id}_kraken2_output_filtered.txt > ${id}_to_keep.txt  
+
+    # Filter the fasta by the keep_list ------
+    seqkit grep -i -f ${id}_to_keep.txt ${seqkit_filtered} > ${id}_seqkit_kn_filtered.fasta
+
     """
 }
 
@@ -242,28 +275,24 @@ process blastcontam {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "BLAST+/2.10.1-IGB-gcc-8.2.0","ncbi-blastdb/20201212","seqkit/0.12.1"              
-    publishDir             "${resultsPath}/BLAST_Contam/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/BLAST_Contam/${params.assembler}/",mode:"copy",overwrite: true
 
 
     input:
-    tuple val(id), file(keep), file(filtered_ln2) from keep_list_kn.join(filtered_ln_blastnt) 
+    tuple val(id), file(kraken_filtered) from seqkit_kn_filtered
 
     output:
-    tuple val(id), file('*_kn_filtered.fasta')
     tuple val(id), file('blast_*_nt0.txt') optional true
     tuple val(id), file('blast_*_nt.txt')
-    tuple val(id), file('*_to_remove_nt.txt')
-    tuple val(id), file('*_ids_remove_nt.txt')
-    tuple val(id), file('*_blst_kn_filtered.fasta') into blast_kn_filtered, blast_kn_filtered2, blast_kn_filtered3
+    tuple val(id), file('*_IDs_to_remove_nt.txt')
+    tuple val(id), file('*_seqkit_kn_blast_filtered.fasta') into seqkit_blast_kn_filtered_for_cdhit
 
     script:
     """
-    # Filter the fasta by the keep_list ------
-    seqkit grep -i -f ${keep} ${filtered_ln2} > ${id}_kn_filtered.fasta
 
     # Run blast -----
     blastn -db nt \
-    -query ${id}_kn_filtered.fasta \
+    -query ${kraken_filtered} \
     -out blast_${id}_nt0.txt \
     -outfmt "6 qseqid sseqid stitle pident length \
     evalue qcovs bitscore staxids sscinames sblastnames \
@@ -282,12 +311,10 @@ process blastcontam {
 
     # Filter the blast NT output to remove contamination ------
     grep -E -v "primates|other sequences" blast_${id}_nt.txt | \
-    awk -F"\t" '(\$4 > ${params.blastnt_filter_pident} && \$5 > ${params.blastnt_filter_length})' \
-     > ${id}_to_remove_nt.txt
-    cut -f1 ${id}_to_remove_nt.txt > ${id}_ids_remove_nt.txt
+    awk -F"\t" '(\$4 > ${params.blastnt_filter_pident} && \$5 > ${params.blastnt_filter_length})' | cut -f1  > ${id}_IDs_to_remove_nt.txt
 
-    # Filter the fasta by the blast keep_list ------
-    seqkit grep -i -v -f ${id}_ids_remove_nt.txt ${id}_kn_filtered.fasta > ${id}_blst_kn_filtered.fasta
+    # Filter the fasta from last step (Kraken) by the blast keep list ------
+    seqkit grep -i -v -f ${id}_IDs_to_remove_nt.txt ${kraken_filtered} > ${id}_seqkit_kn_blast_filtered.fasta
     
     """
 }
@@ -307,17 +334,17 @@ process cdhit {
     publishDir             "${resultsPath}/CD-HIT/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(filtered_kn_blst) from blast_kn_filtered
+    tuple val(id), file(filtered_blst) from seqkit_blast_kn_filtered_for_cdhit
 
     output:
-    tuple val(id), file('*_blst_kn_cdhit.fasta') into blast_kn_cdhit, blast_kn_cdhit2
+    tuple val(id), file('*_seqkit_kn_blast_cdhit.fasta') into seqkit_kn_blast_cdhit_for_blastref,seqkit_kn_blast_cdhit_for_final
 
     script:
     """
     # Use cd-hit to cluster and remove redundancy ------
     cd-hit-est \
-    -i ${filtered_kn_blst} \
-    -o ${id}_blst_kn_cdhit.fasta \
+    -i ${filtered_blst} \
+    -o ${id}_seqkit_kn_blast_cdhit.fasta \
     -c ${params.cdhit_identity} \
     -n ${params.cdhit_wordsize} \
     -T ${task.cpus}
@@ -327,7 +354,7 @@ process cdhit {
 
 } else {
   
- blast_kn_filtered.into {blast_kn_cdhit;blast_kn_cdhit2}
+ seqkit_blast_kn_filtered_for_cdhit.into {seqkit_kn_blast_cdhit_for_blastref;seqkit_kn_blast_cdhit_for_final}
 }
 
 /*
@@ -341,10 +368,10 @@ process blastref {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "BLAST+/2.10.1-IGB-gcc-8.2.0","seqkit/0.12.1"
-    publishDir             "${resultsPath}/BLAST/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/BLAST/${params.assembler}/",mode:"copy",overwrite: true
 
     input:
-    tuple val(id), file(blast_kn_cdhit_filtered) from blast_kn_cdhit
+    tuple val(id), file(seqkit_kn_blast_cdhit_filtered) from seqkit_kn_blast_cdhit_for_blastref
     file genome1 from genome_file1
     file genome2 from genome_file2
     file genome3 from genome_file3
@@ -353,25 +380,24 @@ process blastref {
     file "*" from blast_db3_ch
 
     output:
-    tuple val(id), file('blast_*.GRCh38.decoy.hla0.txt') optional true
-    tuple val(id), file('blast_*.GRCh38.decoy.hla.txt') 
-    tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla0.txt') optional true
-    tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla.txt') 
-    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY0.txt') optional true
-    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY.txt') 
-    tuple val(id), file('blast_*.GRCh38.decoy.hla_to_filter.txt') into filter_GRCH38_decoy_hla
-    tuple val(id), file('blast_*.GRCh38.p0.no.decoy.hla_to_filter.txt') into filter_GRCH38_p0
-    tuple val(id), file('blast_*.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt') into filter_CHM13_GRCH38
+    tuple val(id), file('*.GRCh38.decoys_blast0.txt') optional true
+    tuple val(id), file('*.GRCh38.decoys_blast.txt') 
+    tuple val(id), file('*.GRCh38.p0_blast0.txt') optional true
+    tuple val(id), file('*.GRCh38.p0_blast.txt') 
+    tuple val(id), file('*.CHM13_blast0.txt') optional true
+    tuple val(id), file('*.CHM13_blast.txt') 
+    tuple val(id), file('*.GRCh38.decoys_IDs_to_filter.txt') into filter_GRCH38_decoy_hla
+    tuple val(id), file('*.GRCh38.p0_IDs_to_filter.txt') into filter_GRCH38_p0
+    tuple val(id), file('*.CHM13_IDs_to_filter.txt') into filter_CHM13_GRCH38
   
-    script:
     """
     # Run blast (GRCh38) ------
     blastn -db ${genome1} \
-    -query ${blast_kn_cdhit_filtered} \
+    -query ${seqkit_kn_blast_cdhit_filtered} \
     -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
-    -out blast_${id}.GRCh38.decoy.hla0.txt \
+    -out ${id}.GRCh38.decoys_blast0.txt \
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
@@ -380,20 +406,20 @@ process blastref {
 
     # Create headers for the blast file -----
     echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
-    qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.GRCh38.decoy.hla0.txt > blast_${id}.GRCh38.decoy.hla.txt
-    rm blast_${id}.GRCh38.decoy.hla0.txt
+    qlen,sstart,send,slen" | tr ',' '\t'| cat - ${id}.GRCh38.decoys_blast0.txt > ${id}.GRCh38.decoys_blast.txt
+    rm ${id}.GRCh38.decoys_blast0.txt
 
     # Filter the blast (GRCh38.p0) ------
     awk -F"\t" '(\$4 > ${params.blastr_filter_pident} && \$7 > ${params.blastr_filter_qcov})' \
-    blast_${id}.GRCh38.decoy.hla.txt > blast_${id}.GRCh38.decoy.hla_to_filter.txt
-    
+    ${id}.GRCh38.decoys_blast.txt | cut -f1 | uniq > ${id}.GRCh38.decoys_IDs_to_filter.txt
+
     # Run blast (GRCh38.p0) ------
     blastn -db ${genome2} \
-    -query ${blast_kn_cdhit_filtered} \
+    -query ${seqkit_kn_blast_cdhit_filtered} \
     -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
-    -out blast_${id}.GRCh38.p0.no.decoy.hla0.txt \
+    -out ${id}.GRCh38.p0_blast0.txt \
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
@@ -402,19 +428,20 @@ process blastref {
 
      # Create headers for the blast file -----
     echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
-    qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.GRCh38.p0.no.decoy.hla0.txt > blast_${id}.GRCh38.p0.no.decoy.hla.txt
-    rm blast_${id}.GRCh38.p0.no.decoy.hla0.txt
+    qlen,sstart,send,slen" | tr ',' '\t'| cat - ${id}.GRCh38.p0_blast0.txt > ${id}.GRCh38.p0_blast.txt
+    rm ${id}.GRCh38.p0_blast0.txt
    
     # Filter the blast (GRCh38.po) ------
-    awk -F"\t" '(\$4 > 95 && \$7 > 95)' blast_${id}.GRCh38.p0.no.decoy.hla.txt > blast_${id}.GRCh38.p0.no.decoy.hla_to_filter.txt
+      awk -F"\t" '(\$4 > ${params.blastr_filter_pident} && \$7 > ${params.blastr_filter_qcov})' \
+      ${id}.GRCh38.p0_blast.txt | cut -f1 | uniq > ${id}.GRCh38.p0_IDs_to_filter.txt
 
-    # Run blast (CHM13) ------
+    # Run blast (CHM13 + Chr Y of GRCH38) ------
     blastn -db ${genome3} \
-    -query ${blast_kn_cdhit_filtered} \
+    -query ${seqkit_kn_blast_cdhit_filtered} \
     -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
-    -out blast_${id}.CHM13.v1.1_GRCh38.p13.chrY0.txt \
+    -out ${id}.CHM13_blast0.txt \
     -max_target_seqs ${params.max_target_seqs} \
     -max_hsps ${params.max_hsps}  \
     -evalue ${params.evalue} \
@@ -423,14 +450,16 @@ process blastref {
 
      # Create headers for the blast file -----
     echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
-    qlen,sstart,send,slen" | tr ',' '\t'| cat - blast_${id}.CHM13.v1.1_GRCh38.p13.chrY0.txt > blast_${id}.CHM13.v1.1_GRCh38.p13.chrY.txt
-    rm blast_${id}.CHM13.v1.1_GRCh38.p13.chrY0.txt
+    qlen,sstart,send,slen" | tr ',' '\t'| cat - ${id}.CHM13_blast0.txt > ${id}.CHM13_blast.txt
+    rm ${id}.CHM13_blast0.txt
 
     # Filter the blast (CHM13) ------
-    awk -F"\t" '(\$4 > 95 && \$7 > 95)' blast_${id}.CHM13.v1.1_GRCh38.p13.chrY.txt > blast_${id}.CHM13.v1.1_GRCh38.p13.chrY_to_filter.txt
+    awk -F"\t" '(\$4 > ${params.blastr_filter_pident} && \$7 > ${params.blastr_filter_qcov})' \
+    ${id}.CHM13_blast.txt | cut -f1 | uniq > ${id}.CHM13_IDs_to_filter.txt
 
     """ 
 }
+
 
 /*
   STEP 5: FILTER FASTA FILE BASED ON BLAST STEP
@@ -443,29 +472,26 @@ process final_filtering {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "seqkit/0.12.1"
-    publishDir             "${resultsPath}/Final-Filtered/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/Final-Filtered/${params.assembler}/",mode:"copy",overwrite: true
 
     input:
-    tuple val(id), file(blast_kn_cdhit_filtered2) from blast_kn_cdhit2
-    tuple val(id), file(filter_GRCH38) from filter_GRCH38_decoy_hla
-    tuple val(id), file(filter_GRCH38p0) from filter_GRCH38_p0
-    tuple val(id), file(filter_CHM13) from filter_CHM13_GRCH38
+    tuple val(id),file(cdhit_filtered),file(filter_GRCH38_decoy),file(filter_GRCH38_p0),file(filter_CHM13) from seqkit_kn_blast_cdhit_for_final.join(filter_GRCH38_decoy_hla).join(filter_GRCH38_p0).join(filter_CHM13_GRCH38)
 
     output:
-    tuple val(id), file('*_GRCH38_decoys_hla_filter.final.fasta')
+    tuple val(id), file('*_GRCH38_decoys_filter.final.fasta')
     tuple val(id), file('*_GRCH38_p0_filter.final.fasta')
     tuple val(id), file('*_CHM13_filter.final.fasta')
 
     script:
     """
-    # Filter the fasta using blast output (GRCh38) ------ [grap what is not in the blast output]
-    seqkit grep -i -v -f ${filter_GRCH38} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_decoys_hla_filter.final.fasta
-    
+    # Filter the fasta using blast output (GRCh38) ------ [grab what is not in the blast output]
+    seqkit grep -i -v -f ${filter_GRCH38_decoy} ${cdhit_filtered} > ${id}_GRCH38_decoys_filter.final.fasta
+
     # Filter the fasta using blast output (GRCh38.p0) ------
-    seqkit grep -i -v -f ${filter_GRCH38p0} ${blast_kn_cdhit_filtered2} > ${id}_GRCH38_p0_filter.final.fasta
-    
+    seqkit grep -i -v -f ${filter_GRCH38_p0} ${cdhit_filtered} > ${id}_GRCH38_p0_filter.final.fasta
+
     # Filter the fasta using blast output (CHM13) ------
-    seqkit grep -i -v -f ${filter_CHM13} ${blast_kn_cdhit_filtered2} > ${id}_CHM13_filter.final.fasta
-    
+    seqkit grep -i -v -f ${filter_CHM13} ${cdhit_filtered} > ${id}_CHM13_filter.final.fasta
     """
 }
+

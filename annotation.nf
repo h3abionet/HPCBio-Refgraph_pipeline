@@ -16,7 +16,7 @@ params.skipRepeatMasker       = false          /* If set to true in config file,
 
 /*Parameters to be used inside the pipeline */
 params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
-params.assembler              = 'masurca'      /*options: megahit|masurca. Default is masurca*/
+params.assembler              = 'megahit'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for cdhit */
 params.cdhit_identity         = '0.9'          /*proportion of idenitity for clustering using cdhit. Default is 0.9*/
@@ -36,10 +36,11 @@ defaultMemory                = '120'
 params.clusterAcct           = " -A h3bionet "
 
 /* Create channcel for input files */
-Channel.fromFilePairs("${params.samplePath}", size: 1).into { filtered_Ch;filtered_Ch2 }
-filtered_GRCH38_decoys_Ch3 = Channel.fromFilePairs("${params.samplePath1}", size: 1)
-filtered_GRCH38_p0_Ch3 = Channel.fromFilePairs("${params.samplePath2}", size: 1)
-filtered_CHM13_Ch3 = Channel.fromFilePairs("${params.samplePath3}", size: 1)
+Channel.fromFilePairs("${params.samplePath}", size: 1).into { filtered_for_RepMaster;filtered_for_quast }
+filtered_GRCH38_decoys_Ch3 = Channel.fromPath("${params.samplePath1}").map { file -> tuple(file) }
+filtered_GRCH38_p0_Ch3 = Channel.fromPath("${params.samplePath2}").map { file -> tuple(file) }
+filtered_CHM13_Ch3 = Channel.fromPath("${params.samplePath3}").map { file -> tuple(file) }
+
 
 if (params.skipRepeatMasker == 'false') {
 /*
@@ -56,7 +57,7 @@ process repeatmasker {
     publishDir             "${resultsPath}/RepeatMasker/${params.assembler}/",mode:"copy"
 
     input:
-    tuple val(id), file(fasta) from filtered_Ch 
+    tuple val(id), file(fasta) from filtered_for_RepMaster 
 
     output:
     tuple val(id), file('*.fasta.cat')
@@ -84,11 +85,11 @@ process quast {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${resultsPath}/QUAST/${id}/",mode:"copy"
+    module                  "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
+    publishDir             "${resultsPath}/QUAST/${id}/",mode:"copy",overwrite: true
 
     input:
-    tuple val(id), file(fasta2) from filtered_Ch2 
+    tuple val(id), file(fasta2) from filtered_for_quast
 
     output:
     file '*' into multiqc_ch
@@ -111,8 +112,8 @@ process multiqc {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
-    publishDir             "${resultsPath}/MultiQC/",mode:"copy"
+    module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
+    publishDir             "${resultsPath}/MultiQC/",mode:"copy",overwrite: true
 
     input:
     file('./QUAST/*/*') from multiqc_ch.collect().ifEmpty([])
@@ -129,32 +130,78 @@ process multiqc {
 }
 
 /*
-  STEP 3: MERGE ALL SEQUENCES FROM ALL SAMPLES
+  STEP 3-1: MERGE ALL SEQUENCES FROM ALL SAMPLES 
+  (GRCH38_decoys)
 */
-process merge_reads {
-    tag                    { id }
+process merge_reads_GRCH38_decoys {
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    publishDir             "${resultsPath}/Merged_Reads/${params.assembler}/",mode:"copy"
+    publishDir             "${resultsPath}/Merged_Reads/${params.assembler}/",mode:"copy",overwrite: true
 
     input:
-    tuple val(id), file(fasta3) from filtered_GRCH38_decoys_Ch3
-    tuple val(id), file(fasta33) from filtered_GRCH38_p0_Ch3 
-    tuple val(id), file(fasta333) from filtered_CHM13_Ch3 
+    file fasta3 from filtered_GRCH38_decoys_Ch3.collect()
 
     output:
     file('merged_sequences_GRCH38_decoys.fasta') into merged_seqs_GRCH38_decoys
-    file('merged_sequences_GRCH38_p0.fasta') into merged_seqs_GRCH38_p0
-    file('merged_sequences_CHM13.fasta') into merged_seqs_CHM13
 
     script:
     """
     # Combine all sequences ------
     cat ${fasta3} >> merged_sequences_GRCH38_decoys.fasta
+
+    """
+}
+
+/*
+  STEP 3-2: MERGE ALL SEQUENCES FROM ALL SAMPLES
+  (GRCH38_p0)
+*/
+process merge_reads_GRCH38_p0 {
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   defaultCPU
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    publishDir             "${resultsPath}/Merged_Reads/${params.assembler}/",mode:"copy",overwrite: true
+
+    input:
+    file fasta33 from filtered_GRCH38_p0_Ch3.collect()
+
+    output:
+    file('merged_sequences_GRCH38_p0.fasta') into merged_seqs_GRCH38_p0
+
+    script:
+    """
+    # Combine all sequences ------
     cat ${fasta33} >> merged_sequences_GRCH38_p0.fasta
+
+    """
+}
+
+/*
+  STEP 3-3: MERGE ALL SEQUENCES FROM ALL SAMPLES
+  (CHM13)
+*/
+process merge_reads_CHM13 {
+    executor               myExecutor
+    clusterOptions         params.clusterAcct 
+    cpus                   defaultCPU
+    queue                  params.myQueue
+    memory                 "$defaultMemory GB"
+    publishDir             "${resultsPath}/Merged_Reads/${params.assembler}/",mode:"copy",overwrite: true
+
+    input:
+    file fasta333 from filtered_CHM13_Ch3.collect()
+
+    output:
+    file('merged_sequences_CHM13.fasta') into merged_seqs_CHM13
+
+    script:
+    """
+    # Combine all sequences ------
     cat ${fasta333} >> merged_sequences_CHM13.fasta
 
     """
@@ -164,7 +211,6 @@ process merge_reads {
   STEP 4: RUN CD-HIT ON FILTERED READS
 */
 process cdhit {
-    tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   defaultCPU

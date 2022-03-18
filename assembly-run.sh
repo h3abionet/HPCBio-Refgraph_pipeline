@@ -1,4 +1,3 @@
-#!/bin/bash
 
 #SBATCH --mem 18G
 #SBATCH --job-name assembly
