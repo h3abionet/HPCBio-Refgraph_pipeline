@@ -6,6 +6,10 @@ work/*
 # from Perl
 _Inline
 
+# from the truth-set analysis
+truth-set/*vcf.bgz*
+truth-set/HGSVC2*
+
 #now ignore specific files
 *.nextflow*
 *.html
@@ -36,5 +40,7 @@ _Inline
 *.cov
 *.er
 *.ou
-
+*.Rhistory
+*.Rproj.user
+*DS_Store
 #end ignore

@@ -17,11 +17,15 @@ We are using data from the [recent HGSVC paper](https://science.sciencemag.org/c
 
 Data were downloaded both from [v1](ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC2/release/v1.0) and [v2](ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC2/release/v2.0) releases, focusing here on using v2.  Based on the README in the file, we picked the 'alt' data.
 
+The V2 data is downloaded and placed in `HGSVC2_rel_2.0`.  Load these in.
+
 ```{r}
 vcf <- VcfFile("HGSVC2_rel_2.0/variants_freeze4_sv_insdel_alt.vcf.gz")
 hdr <- scanVcfHeader(vcf)
 hdr
 ```
+
+Look at the metadate information in the header.
 
 ```{r}
 for(i in names(meta(hdr))){
@@ -48,10 +52,10 @@ Of these we want examples from African genomes.
 
 ## 1000g data
 
-Load in the IGSR data
+Load in the IGSR data (downloaded from the [main 1000 genomes site](https://www.internationalgenome.org/data-portal/sample)).  A copy is included in `data`.
 
 ```{r}
-tg <- read_tsv('igsr_samples.tsv', col_types = 'cfcffffff', name_repair = 'universal')
+tg <- read_tsv('data/igsr_samples.tsv', col_types = 'cfcffffff', name_repair = 'universal')
 head(tg)
 ```
 
