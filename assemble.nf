@@ -38,7 +38,8 @@ genomeStore                  = genome_file.getParent()
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
 //if( params.assembler != "megahit" || params.assembler != "masurca" ) exit 1, "Unknown assembler: ${params.assembler}"
 
-CRAM_Ch1 = Channel.fromFilePairs("${params.samplePath}", size: 1)
+Channel.fromFilePairs("${params.samplePath}", size: 1)
+    .into { CRAM_Ch1; CRAM_Ch2}
 
 /*
   prepare_genome 
@@ -75,7 +76,7 @@ process prepare_genome{
 process qc_input {
     tag                    { id }
     executor               myExecutor
-    clusterOptions         params.clusterAcct 
+    clusterOptions         params.clusterAcct
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
@@ -86,17 +87,13 @@ process qc_input {
     tuple val(id), file(CRAM) from CRAM_Ch1
 
     output:
-    tuple val(id), file('*_ok.cram') optional true into extract_unmapped_ch,extract_clipped_ch
+    tuple val(id), file("${id}.final.cram") optional true into extract_unmapped_ch
     
     script:
     """
     samtools quickcheck ${CRAM}
-    if [ \$? -eq 0 ]
-    then
-        cp ${CRAM} ${id}_ok.cram
-    fi
     """
-}
+}    
 
 /*
    Read extraction.  This step is tricky.
@@ -144,7 +141,7 @@ process qc_input {
 process extract_improper {
     tag                    { id }
     executor               myExecutor
-    cpus                   12
+    cpus                   6
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0"
@@ -627,7 +624,6 @@ process aln_reads {
     # merge both files
     samtools merge -@ ${task.cpus} ${id}.${assembler}.sorted.merged.bam ${id}.${assembler}.sorted.pe.bam ${id}.${assembler}.sorted.se.bam
     samtools index ${id}.${assembler}.sorted.merged.bam 
-
     """
 }
 
