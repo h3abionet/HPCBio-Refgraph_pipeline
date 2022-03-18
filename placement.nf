@@ -28,7 +28,8 @@ process AlignToAssembly {
 
   """
   bowtie2-build ${ctg} ${id} 
-  # note this aligns the reads as unpaired; this would be modified for our workflow
+
+  # note this aligns the reads as unpaired, similar to the assembly; this would be modified for our workflow
   bowtie2 -x ${id} -U R1_alignedmate.fq, R2_alignedmate.fq  -S readtocontig.sam 
   """
 }
