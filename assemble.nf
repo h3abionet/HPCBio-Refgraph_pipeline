@@ -4,17 +4,21 @@
 params.genome                = false          /*genome fasta file, must specify complete path. Required parameters*/
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
 params.outputDir             = "./results"    /*output folder, must specify complete path. Required parameters*/
-params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
 params.assembler             = 'masurca'      /*options: megahit|masurca. Default is megahit*/
 params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
 
 /* parameters for readprep = qctrimming and adapter removal */
 params.skipTrim              = false           /*qc-trimming of reads. options: true|false. Default is false*/     
 params.min_read_length       = '20'            /*minimum length of read to be kept after trimming for downstream analysis. Default is 20*/
-params.min_base_quality      = '20'            /*minimum base quality. Default is 20*/
+params.min_base_quality      = '10'            /*minimum base quality. Default is 20*/
 params.guess_adapter         = true            /*auto-detect adapter from input file. options: true|false. Default is true*/
 params.forward_adapter       = false           /*adapter sequence to be clipped off (forward). */
 params.reverse_adapter       = false           /*adapter sequence to be clipped off (reverse). Used for paired reads only*.*/
+
+/* Experimental */
+
+/* Not yet implemented */
+params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
 
 /*Stage*/
 stage = "assembly"
@@ -39,14 +43,15 @@ if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_fil
 //if( params.assembler != "megahit" || params.assembler != "masurca" ) exit 1, "Unknown assembler: ${params.assembler}"
 
 Channel.fromFilePairs("${params.samplePath}", size: 1)
-    .into { CRAM_Ch1; CRAM_Ch2}
+    .into { CRAM_Ch1; CRAM_Ch2 }
 
 /*
   prepare_genome 
   This process is executed only once
 */
 
-process prepare_genome{
+process prepare_genome {
+    container              null
     tag                    { "PREP:${genome}" }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -74,6 +79,7 @@ process prepare_genome{
 */
 
 process qc_input {
+    container              null
     tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct
@@ -139,6 +145,7 @@ process qc_input {
 */
 
 process extract_improper {
+    container              null
     tag                    { id }
     executor               myExecutor
     cpus                   6
@@ -183,6 +190,7 @@ process extract_improper {
 }
 
 process extract_unmapped {
+    container              null
     tag                    { id }
     executor               myExecutor
     cpus                   12
@@ -264,6 +272,7 @@ process extract_unmapped {
 // samtools collate is to use /tmp and does *not* currently use TMPDIR (yeah, pretty crappy)
 
 process extract_clipped {
+    container              null
     tag                    { id }
     executor               myExecutor
     cpus                   12
@@ -302,6 +311,7 @@ process extract_clipped {
 }
 
 process merge_pairs {
+    container              null
     tag                    { id }
     executor               myExecutor
     cpus                   2
@@ -329,6 +339,7 @@ process merge_pairs {
 } 
 
 process fastqc {
+    container              null
     tag "FASTQC-Pretrim ${id}"
     executor               myExecutor
     cpus                   2
@@ -354,6 +365,7 @@ process fastqc {
 */
 
 process trimming {
+    container              null
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -372,7 +384,7 @@ process trimming {
     file '*.html'
         
     script:
-    trimOptions      = params.skipTrim ? ' ' :  ' -l 20 --cut_right --cut_right_window_size 3 --cut_right_mean_quality 10'
+    trimOptions      = params.skipTrim ? " " :  " -l ${params.min_read_length} --cut_right --cut_right_window_size 3 --cut_right_mean_quality ${params.min_base_quality}"
     adapterOptionsSE = params.guess_adapter ? ' ' : " --adapter_sequence=${params.forward_adapter} "
     adapterOptionsPE = params.guess_adapter ? ' --detect_adapter_for_pe ' : " --adapter_sequence=${params.forward_adapter}  --adapter_sequence_r2=${params.reverse_adapter} "
 
@@ -411,6 +423,7 @@ process trimming {
 }
 
 process fastqc_post {
+    container              null
     tag "FASTQC-Posttrim ${id}"
     executor               myExecutor
     clusterOptions         params.clusterAcct     
@@ -440,10 +453,11 @@ process fastqc_post {
 */
 
 process megahit_assemble {
+    container              "docker://quay.io/biocontainers/megahit:1.2.9--h2e03b76_1"
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
-    cpus                   24
+    cpus                   12
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
@@ -480,10 +494,11 @@ process megahit_assemble {
 */
 
 process masurca_assemble {
+    container              null       
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct
-    cpus                   16
+    cpus                   12
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
@@ -532,6 +547,7 @@ process masurca_assemble {
 all_assemblies_rename_ch = megahit_rename_ch.mix(masurca_rename_ch)
 
 process assembly_rename {
+    container              null
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -561,6 +577,7 @@ process assembly_rename {
 // all_assemblies_metrics_ch = megahit_metrics_ch.mix(masurca_metrics_ch)
 
 process assembly_metrics {
+    container              null
     tag {id}
     executor               myExecutor
     clusterOptions         params.clusterAcct     
@@ -590,6 +607,7 @@ process assembly_metrics {
 
 // not sure this will work
 process aln_reads {
+    container              null
     tag {id}
     executor               myExecutor
     cpus                   8
@@ -628,6 +646,7 @@ process aln_reads {
 }
 
 process MultiQC {
+    container              null
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   2
