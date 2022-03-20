@@ -607,8 +607,15 @@ process assembly_rename {
 
 process assembly_metrics {
     // singularity run https://depot.galaxyproject.org/singularity/quast:5.0.1--py36pl526ha92aebf_0
+
+    // there is apparently an issue with the locale settings for quast in biocontainers:
+    // https://github.com/BioContainers/containers/issues/206
+    // this doesn't seem to be resolved yet.
+
+    // testing other containers in the meantime
+
     tag {id}
-    container              "https://depot.galaxyproject.org/singularity/quast:5.0.1--py36pl526ha92aebf_0"
+    container              "staphb/quast:5.0.2"
     executor               myExecutor
     clusterOptions         params.clusterAcct     
     cpus                   4
