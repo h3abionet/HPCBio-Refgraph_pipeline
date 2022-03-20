@@ -457,16 +457,8 @@ process megahit_assemble {
 */
 
 process masurca_assemble {
-    // Note: the version we use is 3.4.2, most up to date is 4.0.6; SS
-    // paper is from 2019 so likely used an even older version than
-    // we use At the moment, this doesn't work with a container
-    // option; this appears to be an issue with the expand_fastq step.
-    // in the masurca workflow: https://github.com/alekseyzimin/masurca/issues/236 
-
-    // container              "https://depot.galaxyproject.org/singularity/masurca:4.0.6--pl5262h86ccdc5_0"
-    // container              "https://depot.galaxyproject.org/singularity/masurca:3.4.2--pl526h66be062_0"
     container              "docker://quay.io/h3abionet_org/masurca"
-    // container              null
+    stageInMode            "copy"
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct
@@ -490,11 +482,13 @@ process masurca_assemble {
     """
     cd ${name}
 
+    gunzip *.trimmed.fastq.gz
+
     cat << EOF > ${name}.masurca_config_file.txt
     DATA
-    PE = pe 300 50 pefastq1.trimmed.fastq.gz pefastq2.trimmed.fastq.gz
-    PE = s1 300 50 sefastq1.trimmed.fastq.gz
-    PE = s2 300 50 sefastq2.trimmed.fastq.gz
+    PE = pe 300 50 pefastq1.trimmed.fastq pefastq2.trimmed.fastq
+    PE = s1 300 50 sefastq1.trimmed.fastq
+    PE = s2 300 50 sefastq2.trimmed.fastq
     END
 
     PARAMETERS
