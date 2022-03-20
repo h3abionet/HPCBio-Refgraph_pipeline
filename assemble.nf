@@ -12,17 +12,25 @@ params.skipTrim              = false           /*qc-trimming of reads. options: 
 params.min_read_length       = '20'            /*minimum length of read to be kept after trimming for downstream analysis. Default is 20*/
 params.min_base_quality      = '10'            /*minimum base quality. Default is 20*/
 params.guess_adapter         = true            /*auto-detect adapter from input file. options: true|false. Default is true*/
-params.forward_adapter       = false           /*adapter sequence to be clipped off (forward). */
-params.reverse_adapter       = false           /*adapter sequence to be clipped off (reverse). Used for paired reads only*.*/
 
 /* Experimental */
 params.tmpdir               = '/scratch'       /*primarily for setting up a defined tmp/scratch space for samtools collate*/
 
 /* Not yet implemented */
-params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
+params.forward_adapter       = false           /*adapter sequence to be clipped off (forward). */
+params.reverse_adapter       = false           /*adapter sequence to be clipped off (reverse). Used for paired reads only*.*/
+
+// params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
 
 /*Stage*/
 stage = "assembly"
+
+supportedAsm = ["masurca", "megahit"]
+
+asms = params.assembler.split(',')
+
+for (assembler : asms)
+    if (!supportedAsm.contains(assembler)) exit 1, "Unknown assembler, ${assembler}"
 
 resultsPath = "${params.outputDir}/${stage}"
 
@@ -41,7 +49,6 @@ genomeStore                  = genome_file.getParent()
 
 // Sanity checks
 if( !genome_file.exists() ) exit 1, "Missing reference genome file: ${genome_file}"
-//if( params.assembler != "megahit" || params.assembler != "masurca" ) exit 1, "Unknown assembler: ${params.assembler}"
 
 Channel.fromFilePairs("${params.samplePath}", size: 1)
     .into { CRAM_Ch1; CRAM_Ch2 }
@@ -174,25 +181,10 @@ process extract_improper {
     // reads is an issue w/ SE data
     
     script:
-    if(params.singleEnd) {
-    
-    """
-    echo "SE support NYI"
-    exit 1
-
-    # Uncomment below when we test SE
-    ## TODO: UNTESTED!!!!
-    ## we only need to extract reads that are unmapped, no worries about pairing
-    # samtools view -@ ${task.cpus} -hbt ${index} -f 4 -o ${id}.unmapped.bam ${cram} 
-    """
-    
-    } else {
-    
     """
     # grab any non-properly paired reads (includes any unmapped and discordant reads) 
     samtools view -@ ${task.cpus} -hbt ${index} -G 2 -o ${id}.improper.bam ${cram}
     """
-    }
 }
 
 process extract_unmapped {
@@ -216,21 +208,7 @@ process extract_unmapped {
     // TODO: leaving this switch in but note that none of the samples in the workflow are SE data;
     // we can prep for this but it's not high priority yet.
     
-    script:
-    if(params.singleEnd) {
-    
-    """
-    echo "SE support NYI"
-    exit 1
-
-    # Uncomment below when we test SE
-    ## TODO: UNTESTED!!!!
-    ## convert to FASTQ
-    # samtools fastq -@ ${task.cpus} ${bam} > ${id}.orphans.unmapped.fastq
-    """
-    
-    } else {
-    
+    script:    
     """    
     # both unmapped
     samtools view -@ ${task.cpus} -hb \\
@@ -271,7 +249,6 @@ process extract_unmapped {
     # we could combine the mapped reads here, but we'll use the original BAM instead
     ## cat ${id}.R1-unmapped.R2.fastq ${id}.R2-unmapped.R1.fastq >> ${id}.orphans.mapped.fastq
     """
-    }
 }
 
 // TODO: note the used of the hard-coded '/scratch' space here.  
@@ -299,12 +276,6 @@ process extract_clipped {
     tuple val(id), file("${id}.all-clipped.R{1,2}.fastq.gz") into fq_pe_clipped_ch
 
     script:
-    if(params.singleEnd) {
-    """
-    echo "SE support NYI"
-    exit 1
-    """
-    } else {
     """
     # capture only discordant clipped reads; note the -G 2
     # the below is to prevent collisions if the pipeline is interrupted and restarted
@@ -318,7 +289,6 @@ process extract_clipped {
     samtools sort -@ ${task.cpus} -o ${id}.clipped.bam ${id}.clipped.tmp.bam
     samtools index ${id}.clipped.bam*
     """
-    }
 }
 
 process merge_pairs {
@@ -405,21 +375,6 @@ process trimming {
     // TODO: leaving this switch in but note that none of the samples in the workflow are SE data;
     // we can prep for this but it's not high priority yet.
 
-    if(params.singleEnd){
-    """
-    echo "SE support NYI"
-    exit 1
-    # fastp --in1 ${reads[0]} \
-    #   --out1 "${name}.SE.R1.trimmed.fastq.gz" \
-    #   ${adapterOptionsSE} ${trimOptions} \
-    #   --thread ${task.cpus} \
-    #   -w ${task.cpus} \
-    # --html "${name}"_SE_fastp.html \
-    # --json "${name}"_SE_fastp.json
-    """
-    
-    } else {
-    
     """
     fastp --in1 ${reads[0]} \
         --in2 ${reads[1]} \
@@ -432,8 +387,6 @@ process trimming {
         --html "${name}"_PE_fastp.html \
         --json "${name}"_PE_fastp.json
     """
-    
-    }
 }
 
 process fastqc_post {
@@ -480,6 +433,9 @@ process megahit_assemble {
     // module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
     publishDir             "${resultsPath}/Raw-Assembly/megahit",mode:"copy",overwrite: true
     
+    when:
+    asms.contains('megahit')
+
     input:
     tuple val(name), file(pefastqs), file(sefastqs) from trim_megahit_ch
 
@@ -488,22 +444,12 @@ process megahit_assemble {
     file("${name}/*")
 
     script:
-    if(params.singleEnd){
-    """
-    echo "SE support NYI"
-    exit 1
-    # megahit -1 ${fastqs[0]} -o ${name}.megahit_results
-    # 
-    # perl \$params.assemblathon ${name}.megahit_results/final.contigs.fa > ${name}.megahit_results/final.contigs.fa.stats
-    """
-    } else {
     """
     megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]} \
         -r ${sefastqs[0]},${sefastqs[1]} \
         -o ${name}
     # megahit -1 ${pefastqs[0]} -2 ${pefastqs[1]} -o ${name}.megahit_results
     """
-    }
 }
 
 /*
@@ -517,19 +463,21 @@ process masurca_assemble {
     // option; this appears to be an issue with the expand_fastq step.
     // in the masurca workflow: https://github.com/alekseyzimin/masurca/issues/236 
 
-    // singularity run https://depot.galaxyproject.org/singularity/masurca:4.0.6--pl5262h86ccdc5_0
-    // singularity run https://depot.galaxyproject.org/singularity/masurca:3.4.2--pl526h66be062_0
-    // container              "docker://quay.io/biocontainers/masurca:3.4.2--pl5262h86ccdc5_1"
-    container              null
+    // container              "https://depot.galaxyproject.org/singularity/masurca:4.0.6--pl5262h86ccdc5_0"
+    // container              "https://depot.galaxyproject.org/singularity/masurca:3.4.2--pl526h66be062_0"
+    container              "docker://quay.io/h3abionet_org/masurca"
+    // container              null
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct
     cpus                   12
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    stageInMode            "copy"
     module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Raw-Assembly/masurca/${name}",mode:"copy", overwrite: true
+    publishDir             "${resultsPath}/Raw-Assembly/masurca/${name}", mode:"copy", overwrite: true
+
+    when:
+    asms.contains('masurca')
 
     input:
     tuple val(name), file("${name}/pefastq*.trimmed.fastq.gz"), file("${name}/sefastq*.trimmed.fastq.gz") from trim_masurca_ch
@@ -542,13 +490,11 @@ process masurca_assemble {
     """
     cd ${name}
 
-    gunzip *.trimmed.fastq.gz
-
     cat << EOF > ${name}.masurca_config_file.txt
     DATA
-    PE = pe 300 50 \$PWD/pefastq1.trimmed.fastq \$PWD/pefastq2.trimmed.fastq
-    PE = s1 300 50 \$PWD/sefastq1.trimmed.fastq
-    PE = s2 300 50 \$PWD/sefastq2.trimmed.fastq
+    PE = pe 300 50 pefastq1.trimmed.fastq.gz pefastq2.trimmed.fastq.gz
+    PE = s1 300 50 sefastq1.trimmed.fastq.gz
+    PE = s2 300 50 sefastq2.trimmed.fastq.gz
     END
 
     PARAMETERS
@@ -623,7 +569,7 @@ process assembly_metrics {
     memory                 "12 GB"
     // module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
     publishDir             "${resultsPath}/QUAST/", mode:"copy", overwrite: true
-    errorStrategy          { task.exitStatus=4 ? 'ignore' : 'terminate' }
+    // errorStrategy          { task.exitStatus=4 ? 'ignore' : 'terminate' }
 
     input:
     tuple val(id), val(assembler), file(asm) from all_assemblies_metrics_ch
@@ -638,7 +584,6 @@ process assembly_metrics {
         --output-dir ${id}.${assembler} \\
         --threads ${task.cpus} \\
         ${asm}
-
     """
 }
 
@@ -653,7 +598,7 @@ process aln_reads {
     memory                 "24 GB"
     // module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
     publishDir             "${resultsPath}/BWA-MEM/${assembler}",mode:"copy",overwrite: true
-    errorStrategy          { task.attempt == 5 ? 'retry' : 'ignore' }
+    // errorStrategy          { task.attempt == 5 ? 'retry' : 'ignore' }
 
     input:
     tuple val(id), val(assembler), file(assembly), file(pereads), file(sereads) from all_assemblies_aln_ch.combine(trim_aln_ch, by:0)
