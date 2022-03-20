@@ -430,7 +430,7 @@ process megahit_assemble {
     cpus                   12
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    // module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
+    // module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0"
     publishDir             "${resultsPath}/Raw-Assembly/megahit",mode:"copy",overwrite: true
     
     when:
@@ -466,7 +466,7 @@ process masurca_assemble {
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
     module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Raw-Assembly/masurca/${name}", mode:"copy", overwrite: true
+    publishDir             "${resultsPath}/Raw-Assembly/masurca", mode:"copy", overwrite: true
 
     when:
     asms.contains('masurca')
