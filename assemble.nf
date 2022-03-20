@@ -16,6 +16,7 @@ params.forward_adapter       = false           /*adapter sequence to be clipped 
 params.reverse_adapter       = false           /*adapter sequence to be clipped off (reverse). Used for paired reads only*.*/
 
 /* Experimental */
+params.tmpdir               = '/scratch'       /*primarily for setting up a defined tmp/scratch space for samtools collate*/
 
 /* Not yet implemented */
 params.singleEnd             = false          /*options: true|false. true = the input type is single end reads; false = the input type is paired reads. Default is false*/
@@ -51,14 +52,16 @@ Channel.fromFilePairs("${params.samplePath}", size: 1)
 */
 
 process prepare_genome {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
+
+    container              "https://depot.galaxyproject.org/singularity/mulled-v2-7ef549f04aa19ef9cd7d243acfee913d928d9b88:f5ff855ea25c94266e524d08d6668ce6c7824604-0"
     tag                    { "PREP:${genome}" }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
+    // module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     storeDir               genomeStore
     
     input:
@@ -79,14 +82,16 @@ process prepare_genome {
 */
 
 process qc_input {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
+    // 
+    container              "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
     tag                    { id }
     executor               myExecutor
     clusterOptions         params.clusterAcct
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
+    // module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     errorStrategy          { task.exitStatus=1 ? 'ignore' : 'terminate' }
     
     input:
@@ -145,13 +150,14 @@ process qc_input {
 */
 
 process extract_improper {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
+    container              "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
     tag                    { id }
     executor               myExecutor
     cpus                   6
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
+    // module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     publishDir             "${resultsPath}/Read-Prep/Improper",mode:"copy", overwrite: true
     
     input:
@@ -190,13 +196,14 @@ process extract_improper {
 }
 
 process extract_unmapped {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
+    container              "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
     tag                    { id }
     executor               myExecutor
     cpus                   12
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "SAMtools/1.12-IGB-gcc-8.2.0"
+    // module                 "SAMtools/1.12-IGB-gcc-8.2.0"
     publishDir             "${resultsPath}/Read-Prep/Unmapped",mode:"copy", overwrite: true
     
     input:
@@ -272,6 +279,9 @@ process extract_unmapped {
 // samtools collate is to use /tmp and does *not* currently use TMPDIR (yeah, pretty crappy)
 
 process extract_clipped {
+    // this may need a mulled repo with python and samtools:
+    // https://github.com/BioContainers/multi-package-containers
+    // best would be a single container w/ bwa, samtools 1.12+, and python 3.7+
     container              null
     tag                    { id }
     executor               myExecutor
@@ -298,7 +308,7 @@ process extract_clipped {
     """
     # capture only discordant clipped reads; note the -G 2
     # the below is to prevent collisions if the pipeline is interrupted and restarted
-    tmpdir=\$( mktemp -d /scratch/collate.XXXXXXXXX )
+    tmpdir=\$( mktemp -d collate.XXXXXXXXX )
     samtools collate --output-fmt bam -@ ${task.cpus - 4} -O ${bam} \$tmpdir/${id} | \
         clipped-filter.py > ${id}.clipped.tmp.bam
 
@@ -306,18 +316,20 @@ process extract_clipped {
         -1 ${id}.all-clipped.R1.fastq.gz -2 ${id}.all-clipped.R2.fastq.gz
     
     samtools sort -@ ${task.cpus} -o ${id}.clipped.bam ${id}.clipped.tmp.bam
+    samtools index ${id}.clipped.bam*
     """
     }
 }
 
 process merge_pairs {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/seqkit:2.1.0--h9ee0642_0
+    container              "https://depot.galaxyproject.org/singularity/seqkit:2.1.0--h9ee0642_0"
     tag                    { id }
     executor               myExecutor
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "seqkit/0.12.1"
+    // module                 "seqkit/0.12.1"
     publishDir             "${resultsPath}/Read-Prep/Merged",mode:"copy", overwrite: true
  
     input:
@@ -339,13 +351,14 @@ process merge_pairs {
 } 
 
 process fastqc {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/fastqc:0.11.9--hdfd78af_1
+    container              "https://depot.galaxyproject.org/singularity/fastqc:0.11.9--hdfd78af_1"
     tag "FASTQC-Pretrim ${id}"
     executor               myExecutor
     cpus                   2
     queue                  params.myQueue
     memory                 "12 GB"
-    module                 "FastQC/0.11.8-Java-1.8.0_152"
+    // module                 "FastQC/0.11.8-Java-1.8.0_152"
     publishDir             "${resultsPath}/FASTQC-Pretrim"
 
     input:
@@ -365,7 +378,8 @@ process fastqc {
 */
 
 process trimming {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/fastp:0.23.2--h79da9fb_0
+    container              "https://depot.galaxyproject.org/singularity/fastp:0.23.2--h79da9fb_0"
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -373,7 +387,7 @@ process trimming {
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     publishDir             "${resultsPath}/Read-Prep/Trimmed",mode:"copy", overwrite: true
-    module                 "fastp/0.20.0-IGB-gcc-4.9.4"
+    // module                 "fastp/0.20.0-IGB-gcc-4.9.4"
 
     input:
     tuple val(name), file(reads) from merge_trim_ch
@@ -423,14 +437,16 @@ process trimming {
 }
 
 process fastqc_post {
-    container              null
+    // https://biocontainers.pro/tools/fastqc
+    // singularity run https://depot.galaxyproject.org/singularity/fastqc:0.11.9--hdfd78af_1
     tag "FASTQC-Posttrim ${id}"
+    container              "https://depot.galaxyproject.org/singularity/fastqc:0.11.9--hdfd78af_1"
     executor               myExecutor
     clusterOptions         params.clusterAcct     
     cpus                   4
     queue                  params.myQueue
     memory                 "12 GB"
-    module                 "FastQC/0.11.8-Java-1.8.0_152"
+    // module                 "FastQC/0.11.8-Java-1.8.0_152"
     publishDir             "${resultsPath}/FASTQC-Posttrim",mode:"copy", overwrite: true
 
     input:
@@ -453,14 +469,15 @@ process fastqc_post {
 */
 
 process megahit_assemble {
-    container              "docker://quay.io/biocontainers/megahit:1.2.9--h2e03b76_1"
+    // https://biocontainers.pro/tools/megahit
     tag                    { name }
+    container              "https://depot.galaxyproject.org/singularity/megahit:1.2.9--h2e03b76_1"
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   12
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
-    module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
+    // module                 "MEGAHIT/1.2.9-IGB-gcc-8.2.0" 
     publishDir             "${resultsPath}/Raw-Assembly/megahit",mode:"copy",overwrite: true
     
     input:
@@ -494,18 +511,28 @@ process megahit_assemble {
 */
 
 process masurca_assemble {
-    container              null       
+    // Note: the version we use is 3.4.2, most up to date is 4.0.6; SS
+    // paper is from 2019 so likely used an even older version than
+    // we use At the moment, this doesn't work with a container
+    // option; this appears to be an issue with the expand_fastq step.
+    // in the masurca workflow: https://github.com/alekseyzimin/masurca/issues/236 
+
+    // singularity run https://depot.galaxyproject.org/singularity/masurca:4.0.6--pl5262h86ccdc5_0
+    // singularity run https://depot.galaxyproject.org/singularity/masurca:3.4.2--pl526h66be062_0
+    // container              "docker://quay.io/biocontainers/masurca:3.4.2--pl5262h86ccdc5_1"
+    container              null
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct
     cpus                   12
     queue                  params.myQueue
     memory                 "$assemblerMemory GB"
+    stageInMode            "copy"
     module                 "MaSuRCA/3.4.2-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/Raw-Assembly/masurca",mode:"copy", overwrite: true
+    publishDir             "${resultsPath}/Raw-Assembly/masurca/${name}",mode:"copy", overwrite: true
 
     input:
-    tuple val(name), file(pefastqs), file(sefastqs) from trim_masurca_ch
+    tuple val(name), file("${name}/pefastq*.trimmed.fastq.gz"), file("${name}/sefastq*.trimmed.fastq.gz") from trim_masurca_ch
 
     output:
     tuple val(name), val("masurca"), file("${name}/CA/final.genome.scf.fasta") into masurca_rename_ch
@@ -513,14 +540,15 @@ process masurca_assemble {
 
     script:
     """
-    mkdir ${name}
     cd ${name}
+
+    gunzip *.trimmed.fastq.gz
 
     cat << EOF > ${name}.masurca_config_file.txt
     DATA
-    PE = pe 150 50 ../${pefastqs[0]} ../${pefastqs[1]}
-    PE = s1 150 50 ../${sefastqs[0]}
-    PE = s2 150 50 ../${sefastqs[1]}
+    PE = pe 300 50 \$PWD/pefastq1.trimmed.fastq \$PWD/pefastq2.trimmed.fastq
+    PE = s1 300 50 \$PWD/sefastq1.trimmed.fastq
+    PE = s2 300 50 \$PWD/sefastq2.trimmed.fastq
     END
 
     PARAMETERS
@@ -547,7 +575,8 @@ process masurca_assemble {
 all_assemblies_rename_ch = megahit_rename_ch.mix(masurca_rename_ch)
 
 process assembly_rename {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/perl:5.26.2
+    container              "https://depot.galaxyproject.org/singularity/perl:5.26.2"
     tag                    { name }
     executor               myExecutor
     clusterOptions         params.clusterAcct 
@@ -569,22 +598,23 @@ process assembly_rename {
     // Strip off anything after the first '.'
     shortname = name.replaceAll(~/\.\S+$/, "")
     """
+    # this could be replaced with something else if needed for a simpler container
     perl -p -e 's/^>(\\N+)/>${name}:\$1/' ${assembly} > ${name}.${assembler}.final.fasta
-
     """
 }
 
 // all_assemblies_metrics_ch = megahit_metrics_ch.mix(masurca_metrics_ch)
 
 process assembly_metrics {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/quast:5.0.1--py36pl526ha92aebf_0
     tag {id}
+    container              "https://depot.galaxyproject.org/singularity/quast:5.0.1--py36pl526ha92aebf_0"
     executor               myExecutor
     clusterOptions         params.clusterAcct     
     cpus                   4
     queue                  params.myQueue
     memory                 "12 GB"
-    module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
+    // module                 "quast/5.0.0-IGB-gcc-4.9.4-Python-3.6.1"
     publishDir             "${resultsPath}/QUAST/", mode:"copy", overwrite: true
     errorStrategy          { task.exitStatus=4 ? 'ignore' : 'terminate' }
 
@@ -605,16 +635,16 @@ process assembly_metrics {
     """
 }
 
-// not sure this will work
 process aln_reads {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
     tag {id}
+    container              "https://depot.galaxyproject.org/singularity/mulled-v2-7ef549f04aa19ef9cd7d243acfee913d928d9b88:f5ff855ea25c94266e524d08d6668ce6c7824604-0"
     executor               myExecutor
     cpus                   8
     queue                  params.myQueue
     clusterOptions         params.clusterAcct     
-    memory                 "12 GB"
-    module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
+    memory                 "24 GB"
+    // module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
     publishDir             "${resultsPath}/BWA-MEM/${assembler}",mode:"copy",overwrite: true
     errorStrategy          { task.attempt == 5 ? 'retry' : 'ignore' }
 
@@ -631,12 +661,14 @@ process aln_reads {
     bwa index ${assembly}
 
     # PE
-    bwa mem -t ${task.cpus - 4} ${assembly} ${pereads[0]} ${pereads[1]} | samtools sort -@ 4 -o ${id}.${assembler}.sorted.pe.bam
+    bwa mem -t ${task.cpus - 4} ${assembly} ${pereads[0]} ${pereads[1]} | \
+        samtools sort -@ 4 -O bam -T ${id} -o ${id}.${assembler}.sorted.pe.bam
     samtools index ${id}.${assembler}.sorted.pe.bam
 
     # SE
     cat ${sereads[0]} ${sereads[1]} > ${id}.se.fastq.gz
-    bwa mem -t ${task.cpus - 4} ${assembly} ${id}.se.fastq.gz | samtools sort -@ 4 -o ${id}.${assembler}.sorted.se.bam
+    bwa mem -t ${task.cpus - 4} ${assembly} ${id}.se.fastq.gz | \
+        samtools sort -@ 4 -O bam -T ${id} -o ${id}.${assembler}.sorted.se.bam
     samtools index ${id}.${assembler}.sorted.se.bam
 
     # merge both files
@@ -646,13 +678,14 @@ process aln_reads {
 }
 
 process MultiQC {
-    container              null
+    // singularity run https://depot.galaxyproject.org/singularity/multiqc:1.12--pyhdfd78af_0
+    container              "https://depot.galaxyproject.org/singularity/multiqc:1.12--pyhdfd78af_0"
     executor               myExecutor
     clusterOptions         params.clusterAcct 
     cpus                   2
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
+    // module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
     publishDir             "${resultsPath}/MultiQC",mode:"copy",overwrite: true
  
     input:
@@ -666,6 +699,5 @@ process MultiQC {
 
     """
     multiqc  .
-
     """
 } 
