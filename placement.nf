@@ -1,13 +1,37 @@
-/*
-The logic in this step of the workflow follows the Chinese Han publication
-logic for placing contigs up to clustering.  We'll include the relevant
-python code in 'bin' but possibly start by using the nextflow script location
-and maybe check in as a submodule for now.
+#!/usr/bin/env nextflow
+
+/*parameters that are specified at the command line or via config file*/
+params.genome                = false          /* genome fasta file, must specify complete path. Required parameters */
+params.inputDir              = "./results"    /* input folder, must specify complete path. Required parameters */
+params.inputStage            = "assembly"     /* stage of results to use, can be 'assembly' or 'filtered' */
+params.outputDir             = "./results"    /* output folder, must specify complete path. Required parameters */
+params.assembler             = 'masurca'      /* options: megahit|masurca. Default is megahit.  Only one can be analyzed here */
+params.skipKraken2           = true           /* options: true|false. Default is true which means that kraken2 will be skipped */
+
+/*Stage*/
+stage = "placement"
+
+/*cluster parameters */
+myExecutor                   = 'slurm'
+params.myQueue               = 'hpcbio'
+defaultCPU                   = '1'
+defaultMemory                = '20'
+assemblerCPU                 = '12'
+assemblerMemory              = '100'
+params.clusterAcct           = " -A h3bionet "
+
+/*Prepare input*/
+genome_file                  = file(params.genome)
+genomeStore                  = genome_file.getParent()
+
+dataPath = file("${params.inputDir}/${params.stage}")
+
+alns = Channel.fromFilePairs("${params.dataPath}/BWA-MEM/*.bam", size: 1)
+    .into { BAM_Ch1 }
+
+/* The logic in this workflow depends largely on how the original directory 
+  structure for the assembly or filtering step is performed. 
 */
-
-// Set up input channels from 'assembly' folder; the relevant files are in the 
-// subfolders
-
 
 // Step 1 involved assemblies and basic filtering
 // Step 2: Get placement
@@ -48,7 +72,7 @@ process PlaceRegions {
   output
 
   """
-  #
+  # filter primary/supplemental alignments to get mappings
   samtools view -h -F 2304 readtocontig.sam  \
     | samtools sort -n -O bam \
     | bedtools bamtobed -i stdin \

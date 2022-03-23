@@ -7,6 +7,10 @@ params.outputDir             = "./results"    /*output folder, must specify comp
 params.assembler             = 'masurca'      /*options: megahit|masurca. Default is megahit*/
 params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
 
+/* alignment stats */
+params.meanInsSize           = 300
+params.stdevInsSize          = 100
+
 /* parameters for readprep = qctrimming and adapter removal */
 params.skipTrim              = false           /*qc-trimming of reads. options: true|false. Default is false*/     
 params.min_read_length       = '20'            /*minimum length of read to be kept after trimming for downstream analysis. Default is 20*/
@@ -214,19 +218,19 @@ process extract_unmapped {
     samtools view -@ ${task.cpus} -hb \\
         -f 12 -F 2304 -o ${id}.both-unmapped.bam ${bam}
 
-    samtools fastq -@ ${task.cpus} ${id}.both-unmapped.bam \\
+    samtools fastq -i -@ ${task.cpus} ${id}.both-unmapped.bam \\
         -1 ${id}.both-unmapped.R1.fastq.gz -2 ${id}.both-unmapped.R2.fastq.gz
 
     # R1 only unmapped
-    samtools view -@ ${task.cpus} -hb \\
+    samtools view -i -@ ${task.cpus} -hb \\
         -f 4 -F 2312 -o ${id}.R1-unmapped.bam ${bam}
-    samtools fastq -@ ${task.cpus} ${id}.R1-unmapped.bam \\
+    samtools fastq -i -@ ${task.cpus} ${id}.R1-unmapped.bam \\
         -1 ${id}.R1-unmapped.R1.fastq.gz -2 ${id}.R1-unmapped.R2.fastq.gz
     
     # R2 only unmapped
     samtools view -@ ${task.cpus} -hb \\
         -f 8 -F 2308 -o ${id}.R2-unmapped.bam ${bam}    
-    samtools fastq -@ ${task.cpus} ${id}.R2-unmapped.bam \\
+    samtools fastq -i -@ ${task.cpus} ${id}.R2-unmapped.bam \\
         -1 ${id}.R2-unmapped.R1.fastq.gz -2 ${id}.R2-unmapped.R2.fastq.gz
     
     # combine unmapped BAM files for later analysis
@@ -313,8 +317,13 @@ process merge_pairs {
     cat ${unmapped[0]} ${clipped[0]} > ${id}.all-reads.R1.tmp.fastq.gz
     cat ${unmapped[1]} ${clipped[1]} > ${id}.all-reads.R2.tmp.fastq.gz
 
-    seqkit rmdup -n -j ${task.cpus} -o ${id}.all-reads.R1.fastq.gz ${id}.all-reads.R1.tmp.fastq.gz 2> ${id}.R1.rmdup.txt
-    seqkit rmdup -n -j ${task.cpus} -o ${id}.all-reads.R2.fastq.gz ${id}.all-reads.R2.tmp.fastq.gz 2> ${id}.R2.rmdup.txt
+    seqkit rmdup -n \
+        -j ${task.cpus} ${id}.all-reads.R1.tmp.fastq.gz 2> ${id}.R1.rmdup.txt \
+        | seqkit sort -n -o ${id}.all-reads.R1.fastq.gz 
+    
+    seqkit rmdup -n \
+        -j ${task.cpus} ${id}.all-reads.R2.tmp.fastq.gz 2> ${id}.R2.rmdup.txt \
+        | seqkit sort -n -o ${id}.all-reads.R2.fastq.gz
 
     rm ${id}.all-reads.R1.tmp.fastq.gz ${id}.all-reads.R2.tmp.fastq.gz
     """
@@ -380,7 +389,7 @@ process trimming {
         --in2 ${reads[1]} \
         --out1 "${name}.PE.R1.trimmed.fastq.gz"  \
         --out2 "${name}.PE.R2.trimmed.fastq.gz" \
-        --unpaired1 "${name}.unpR1.trimmed.fastq.gz"\
+        --unpaired1 "${name}.unpR1.trimmed.fastq.gz" \
         --unpaired2 "${name}.unpR2.trimmed.fastq.gz" \
         ${adapterOptionsPE}  ${trimOptions} \
         --thread ${task.cpus} -w ${task.cpus} \
@@ -486,9 +495,9 @@ process masurca_assemble {
 
     cat << EOF > ${name}.masurca_config_file.txt
     DATA
-    PE = pe 300 50 pefastq1.trimmed.fastq pefastq2.trimmed.fastq
-    PE = s1 300 50 sefastq1.trimmed.fastq
-    PE = s2 300 50 sefastq2.trimmed.fastq
+    PE = pe ${params.meanInsSize} ${params.stdevInsSize} pefastq1.trimmed.fastq pefastq2.trimmed.fastq
+    PE = s1 ${params.meanInsSize} ${params.stdevInsSize} sefastq1.trimmed.fastq
+    PE = s2 ${params.meanInsSize} ${params.stdevInsSize} sefastq2.trimmed.fastq
     END
 
     PARAMETERS
