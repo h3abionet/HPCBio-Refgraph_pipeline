@@ -37,14 +37,48 @@ assembly="megahit"
 module purge
 module load BLAST+/2.10.1-IGB-gcc-8.2.0
 
-# blast to compare two sequences --- 
-for j in pipeline_testing/merged_AFR/${assembly}/*seqkit_kn*.fasta
+# # blast to compare two sequences --- 
+# for j in pipeline_testing/merged_AFR/${assembly}/*seqkit_kn*.fasta
+# do 
+# start=`date +%s` # capture start time
+# newj=$(echo $(basename ${j}) | sed 's/.fasta//g')
+# echo "BLAST to reference genome is starting for ${j}"
+# blastn -db ../GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa \
+# -query ${j} \
+#  -outfmt "6 qseqid sseqid stitle pident \
+#     length evalue qcovs bitscore mismatch \
+#     gapopen qstart qend qlen sstart send slen" \
+# -perc_identity 100 \
+# -max_target_seqs 5 \
+# -max_hsps 10 \
+# -evalue 1e-5 \
+# -num_threads $SLURM_NPROCS \
+# -out pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.0.tsv
+
+# # Create headers for the blast file -----
+# echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
+# qlen,sstart,send,slen" | tr ',' '\t'| cat - pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.0.tsv \
+# > pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.tsv
+
+# rm pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.0.tsv
+
+# end=`date +%s`
+# runtime=$((end-start))
+# runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
+# echo "It took $runtime minutes to run blast ref genome for ${j}"
+
+# done
+
+
+# blast to compare two sequences ---
+for i in pipeline_testing/merged_AFR/${assembly}/3.seqkit_kn_filtered_All_AFR_megahit.fasta
 do 
-start=`date +%s` # capture start time
-newj=$(echo $(basename ${j}) | sed 's/.fasta//g')
-echo "BLAST to reference genome is starting for ${j}"
-blastn -db ../GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa \
--query ${j} \
+start=`date +%s` # capture start time 
+newi=$(echo $(basename ${i}) | sed 's/.fasta//g')
+echo "Subject-Query BLAST is starting for ${i}"
+blastn \
+-query ${i} \
+-subject /home/groups/h3abionet/RefGraph/results/2022-01-30-HGSVCv2-truthset/data/insertions.fasta \
  -outfmt "6 qseqid sseqid stitle pident \
     length evalue qcovs bitscore mismatch \
     gapopen qstart qend qlen sstart send slen" \
@@ -53,19 +87,19 @@ blastn -db ../GRCh38/GRCh38_full_analysis_set_plus_decoy_hla.fa \
 -max_hsps 10 \
 -evalue 1e-5 \
 -num_threads $SLURM_NPROCS \
--out pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.0.tsv
+-out pipeline_testing/BLAST/${assembly}/${newi}_blast_compare.0.tsv
 
 # Create headers for the blast file -----
 echo -e "qseqid,sseqid,stitle,pident,length,evalue,qcovs,bitscore,mismatch,gapopen,qstart,qend, \
-qlen,sstart,send,slen" | tr ',' '\t'| cat - pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.0.tsv \
-> pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.tsv
+qlen,sstart,send,slen" | tr ',' '\t'| cat - pipeline_testing/BLAST/${assembly}/${newi}_blast_compare.0.tsv \
+> pipeline_testing/BLAST/${assembly}/${newi}_blast_compare.tsv
 
-rm pipeline_testing/BLAST/${assembly}/${newj}_blast_ref.0.tsv
+rm pipeline_testing/BLAST/${assembly}/${newi}_blast_compare.0.tsv
 
 end=`date +%s`
 runtime=$((end-start))
 runtime=$( echo "scale=2;$((end-start)) / 60" | bc )
-echo "It took $runtime minutes to run blast ref genome for ${j}"
+echo "It took $runtime minutes to run blast subject-query for ${i}"
 
 done
 

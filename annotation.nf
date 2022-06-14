@@ -19,8 +19,8 @@ params.outputDir              = "./results"    /*output folder, must specify pat
 params.assembler              = 'megahit'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for cdhit */
-params.cdhit_identity         = '0.9'          /*proportion of idenitity for clustering using cdhit. Default is 0.9*/
-params.cdhit_wordsize         = '7'            /*word size for cdhit. Default is 7*/
+params.cdhit_identity         = '0.99'          /*proportion of idenitity for clustering using cdhit. Default is 0.9*/
+params.cdhit_wordsize         = '5'            /*word size for cdhit. Default is 5*/
 
 /*Stage*/
 stage = "annotation"
