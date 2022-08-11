@@ -129,7 +129,8 @@ text goes here
 
 # Authors
 
+* Negin Valizadegan
 * Yuan Tian
 * Gloria Rendon
 * Chris Fields
-* Kim Walden
+* Kim Walden 
