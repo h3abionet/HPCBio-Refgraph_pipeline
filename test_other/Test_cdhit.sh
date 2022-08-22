@@ -21,17 +21,6 @@ cd /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021/results/annota
 # Load nextflow ------
 module load CD-HIT/4.8.1-IGB-gcc-8.2.0
 
-# Variables ----
-
-identity_array=(0.9 0.92 0.94 0.96 0.99)
-
-if [identity < 0.95 && identity >= 0.90]
-then
-wordsize = '8'
-else if [identity <= 1.0 && identity >= 0.95]
-wordsize = '10'
-fi
-
 #Choose of word size: 
 #For DNAs:
  # * Word size 10-11 is for thresholds 0.95 ~ 1.0
@@ -48,22 +37,20 @@ fi
 
 # megahit -----
 
-for i in ${identity_array[@]}
-do
-cd-hit-est \
--i Merged_Reads/megahit/merged_sequences_GRCH38_decoys.fasta \
--o Cluster_CDHIT/megahit/clustered_GRCH38_decoys_n5_i_${i}.fasta \
--c ${i} \
--n ${wordsize} \
--T $SLURM_NPROCS
-done
+# # 0.90
+# cd-hit-est \
+# -i Merged_Reads/megahit/merged_sequences_GRCH38_decoys.fasta \
+# -o Cluster_CDHIT/megahit/clustered_GRCH38_decoys_n5_i0.90.fasta \
+# -c 0.90 \
+# -n 8 \
+# -T $SLURM_NPROCS
 
 # # 0.92
 # cd-hit-est \
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_decoys.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_decoys_n5_i0.92.fasta \
 # -c 0.92 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS
 
 # # 0.94
@@ -71,7 +58,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_decoys.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_decoys_n5_i0.94.fasta \
 # -c 0.94 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS
 
 # # 0.96
@@ -79,7 +66,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_decoys.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_decoys_n5_i0.96.fasta \
 # -c 0.96 \
-# -n 5 \
+# -n 10 \
 # -T $SLURM_NPROCS
 
 
@@ -90,7 +77,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_decoys.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_decoys_n5_i0.9.fasta \
 # -c 0.9 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS
 
 # # 0.92
@@ -98,7 +85,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_decoys.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_decoys_n5_i0.92.fasta \
 # -c 0.92 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS
 
 # # 0.94
@@ -114,7 +101,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_decoys.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_decoys_n5_i0.96.fasta \
 # -c 0.96 \
-# -n 5 \
+# -n 10 \
 # -T $SLURM_NPROCS
 
 
@@ -127,8 +114,7 @@ done
 # cd-hit-est \
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_p0_n5_i0.9.fasta \
-# -c 0.9 \
-# -n 5 \
+# -c 8 \
 # -T $SLURM_NPROCS  
 
 # # 0.92
@@ -136,7 +122,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_p0_n5_i0.92.fasta \
 # -c 0.92 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS
 
 # # 0.94
@@ -144,7 +130,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_p0_n5_i0.94.fasta \
 # -c 0.94 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS  
 
 # # 0.96
@@ -152,7 +138,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/megahit/clustered_GRCH38_p0_n5_i0.96.fasta \
 # -c 0.96 \
-# -n 5 \
+# -n 10 \
 # -T $SLURM_NPROCS  
 
 
@@ -163,7 +149,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_p0_n5_i0.9.fasta \
 # -c 0.9 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.92
@@ -171,7 +157,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_p0_n5_i0.92.fasta \
 # -c 0.92 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.94
@@ -179,7 +165,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_p0_n5_i0.94.fasta \
 # -c 0.94 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.96
@@ -187,7 +173,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_GRCH38_p0.fasta \
 # -o Cluster_CDHIT/masurca/clustered_GRCH38_p0_n5_i0.96.fasta \
 # -c 0.96 \
-# -n 5 \
+# -n 10 \
 # -T $SLURM_NPROCS 
 
 
@@ -200,7 +186,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/megahit/clustered_CHM13_n5_i0.9.fasta \
 # -c 0.9 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.92
@@ -208,7 +194,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/megahit/clustered_CHM13_n5_i0.92.fasta \
 # -c 0.92 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.94
@@ -216,7 +202,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/megahit/clustered_CHM13_n5_i0.94.fasta \
 # -c 0.94 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.96
@@ -224,7 +210,7 @@ done
 # -i Merged_Reads/megahit/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/megahit/clustered_CHM13_n5_i0.96.fasta \
 # -c 0.96 \
-# -n 5 \
+# -n 10 \
 # -T $SLURM_NPROCS 
 
 
@@ -235,7 +221,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/masurca/clustered_CHM13_n5_i0.9.fasta \
 # -c 0.9 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.92
@@ -243,7 +229,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/masurca/clustered_CHM13_n5_i0.92.fasta \
 # -c 0.92 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.94
@@ -251,7 +237,7 @@ done
 # -i Merged_Reads/masurca/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/masurca/clustered_CHM13_n5_i0.94.fasta \
 # -c 0.94 \
-# -n 5 \
+# -n 8 \
 # -T $SLURM_NPROCS 
 
 # # 0.96
@@ -259,5 +245,5 @@ done
 # -i Merged_Reads/masurca/merged_sequences_CHM13.fasta \
 # -o Cluster_CDHIT/masurca/clustered_CHM13_n5_i0.96.fasta \
 # -c 0.96 \
-# -n 5 \
+# -n 10 \
 # -T $SLURM_NPROCS 

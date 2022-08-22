@@ -36,7 +36,7 @@ params.blastr_filter_pident   = '95'           /*filtering cut off for percentag
 params.blastr_filter_qcov     = '95'           /*filtering cut off for query coverage from blast ref genome. Default is 95*/
 
 /*Parameters for cdhit */
-params.cdhit_identity         = '0.9'          /*proportion of idenitity for clustering. Default is 0.9*/
+params.cdhit_identity         = '0.99'          /*proportion of idenitity for clustering. Default is 0.99*/
 params.cdhit_wordsize         = '5'            /*word size for cdhit. Default is 5*/
 
 /*Stage*/
