@@ -599,8 +599,8 @@ process aln_reads {
     queue                  params.myQueue
     clusterOptions         params.clusterAcct     
     memory                 "24 GB"
-    // module                 "BWA/0.7.17-IGB-gcc-8.2.0","SAMtools/1.12-IGB-gcc-8.2.0"
-    publishDir             "${resultsPath}/BWA-MEM/${assembler}",mode:"copy",overwrite: true
+    // module               "Bowtie2/2.4.2-IGB-gcc-8.2.0,"SAMtools/1.12-IGB-gcc-8.2.0"
+    publishDir             "${resultsPath}/BOWTIE/${assembler}",mode:"copy",overwrite: true
     // errorStrategy          { task.attempt == 5 ? 'retry' : 'ignore' }
 
     input:
@@ -613,16 +613,16 @@ process aln_reads {
 
     script:
     """
-    bwa index ${assembly}
+    bowtie-build ${assembly}
 
     # PE
-    bwa mem -t ${task.cpus - 4} ${assembly} ${pereads[0]} ${pereads[1]} | \
+    bowtie2 -p ${task.cpus - 4} -x ${assembly} ${pereads[0]} ${pereads[1]} | \
         samtools sort -@ 4 -O bam -T ${id} -o ${id}.${assembler}.sorted.pe.bam
     samtools index ${id}.${assembler}.sorted.pe.bam
 
     # SE
     cat ${sereads[0]} ${sereads[1]} > ${id}.se.fastq.gz
-    bwa mem -t ${task.cpus - 4} ${assembly} ${id}.se.fastq.gz | \
+     bowtie2 -t ${task.cpus - 4} -x ${assembly} ${id}.se.fastq.gz | \
         samtools sort -@ 4 -O bam -T ${id} -o ${id}.${assembler}.sorted.se.bam
     samtools index ${id}.${assembler}.sorted.se.bam
 

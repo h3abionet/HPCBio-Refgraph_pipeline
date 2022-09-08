@@ -13,7 +13,7 @@
 #-N 1 #node or computer
 
 ### HPCBio: This merges AFR files at each step of pipeline and give blast and seqkit stats; 
-# Created by Negin Valizadegan March 5, 2022; valizad2@illinois.edu
+# Created by Negin Valizadegan aPRIL 27, 2022; valizad2@illinois.edu
 
 
 
@@ -42,48 +42,8 @@ mkdir -p pipeline_testing/merged_AFR/${assembly}/
 
 echo "Sequence files from various RefGraph pipeline steps are merging"
 
-# Final assembly -----
-rm pipeline_testing/merged_AFR/${assembly}/1.Final_Assembly_All_AFR_${assembly}.fasta # you can add -f to get rid of error about file not existing.
-cat assembly/Final-Assembly/${assembly}/AFR/*.${assembly}.final.fasta \
->> pipeline_testing/merged_AFR/${assembly}/1.Final_Assembly_All_AFR_${assembly}.fasta
-
-# Filted to >500 length sequence by seqkit -----
-rm pipeline_testing/merged_AFR/${assembly}/2.seqkit_500_All_AFR_${assembly}.fasta
-cat filter/SeqKit/${assembly}/*_minLength_500.fasta \
->> pipeline_testing/merged_AFR/${assembly}/2.seqkit_500_All_AFR_${assembly}.fasta
-
-# Filtered by Kraken -----
-rm pipeline_testing/merged_AFR/${assembly}/3.seqkit_kn_filtered_All_AFR_${assembly}.fasta
-cat filter/Kraken2/${assembly}/*_seqkit_kn_filtered.fasta \
->> pipeline_testing/merged_AFR/${assembly}/3.seqkit_kn_filtered_All_AFR_${assembly}.fasta
-
-# Filtered by blast NT -----
-rm pipeline_testing/merged_AFR/${assembly}/4.seqkit_kn_blast_filtered_All_AFR_${assembly}.fasta
-cat filter/BLAST_Contam/${assembly}/*_seqkit_kn_blast_filtered.fasta \
->> pipeline_testing/merged_AFR/${assembly}/4.seqkit_kn_blast_filtered_All_AFR_${assembly}.fasta
-
-# Clustered by CD-HIT -----
-rm pipeline_testing/merged_AFR/${assembly}/5.seqkit_kn_blast_cdhit_All_AFR_${assembly}.fasta
-cat filter/CD-HIT/${assembly}/*_seqkit_kn_blast_cdhit.fasta \
->> pipeline_testing/merged_AFR/${assembly}/5.seqkit_kn_blast_cdhit_All_AFR_${assembly}.fasta
-
-# Filtered by blast GRCH38.p0 -----
-rm pipeline_testing/merged_AFR/${assembly}/6.GRCH38_p0_filter_All_AFR_${assembly}.fasta
-cat filter/Final-Filtered/${assembly}/*_GRCH38_p0_filter.final.fasta \
->> pipeline_testing/merged_AFR/${assembly}/6.GRCH38_p0_filter_All_AFR_${assembly}.fasta
-
-# Filtered by blast GRCH38.decoys -----
-rm pipeline_testing/merged_AFR/${assembly}/6.GRCH38_decoys_filter_All_AFR_${assembly}.fasta
-cat filter/Final-Filtered/${assembly}/*_GRCH38_decoys_filter.final.fasta \
->> pipeline_testing/merged_AFR/${assembly}/6.GRCH38_decoys_filter_All_AFR_${assembly}.fasta
-
-# Filtered by blast CHM13 -----
-rm pipeline_testing/merged_AFR/${assembly}/6.CHM13_filter_All_AFR_${assembly}.fasta
-cat filter/Final-Filtered/${assembly}/*_CHM13_filter.final.fasta \
->> pipeline_testing/merged_AFR/${assembly}/6.CHM13_filter_All_AFR_${assembly}.fasta
 
 # CD-HIT in annotation by blast GRCH38.p0 -----
-rm pipeline_testing/merged_AFR/${assembly}/7.clustered_*.fasta
 for file in annotation/Cluster_CDHIT/${assembly}/clustered_*.fasta 
 do
 newfile=$(echo $(basename ${file}) | sed 's/.fasta//g')
@@ -157,7 +117,7 @@ module load BLAST+/2.10.1-IGB-gcc-8.2.0
 mkdir -p pipeline_testing/BLAST/${assembly}/
 
 # blast to compare two sequences ---
-for i in pipeline_testing/merged_AFR/${assembly}/*.fasta
+for i in pipeline_testing/merged_AFR/${assembly}/*n5*.fasta
 do 
 start=`date +%s` # capture start time 
 newi=$(echo $(basename ${i}) | sed 's/.fasta//g')
@@ -206,7 +166,7 @@ module purge
 module load BLAST+/2.10.1-IGB-gcc-8.2.0
 
 # blast to compare two sequences --- 
-for j in pipeline_testing/merged_AFR/${assembly}/*.fasta
+for j in pipeline_testing/merged_AFR/${assembly}/*n*.fasta
 do 
 start=`date +%s` # capture start time
 newj=$(echo $(basename ${j}) | sed 's/.fasta//g')
@@ -355,12 +315,12 @@ echo "Created a table with pident=100 and qcovs=100 and number of sequences from
 main ()
 {
 	# Determine whether running full pipeline or single step
-	runtype="PARTIAL"
-  #runtype="FULL"
+	#runtype="PARTIAL"
+  runtype="FULL"
   echo ""
 	echo "*** RUNNING ${runtype} BLAST COMPARE PIPELINE ***"
   
-#quast
+quast
 #blast_test
 #blast_ref
 count
@@ -386,7 +346,7 @@ main
 
   echo "started multiqc"
 
-  multiqc -f pipeline_testing/ -o pipeline_testing/MultiQC/ # -f will force it to overwrite previous runs
+  #multiqc -f pipeline_testing/ -o pipeline_testing/MultiQC/ # -f will force it to overwrite previous runs
 
   echo "completed multiqc"
   

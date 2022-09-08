@@ -1,3 +1,4 @@
+#!/bin/bash
 
 #SBATCH --mem 18G
 #SBATCH --job-name assembly
@@ -20,8 +21,8 @@ cd /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021
 module load nextflow/21.04.1-Java-1.8.0_152
 
 # Run nextflow UIUC workflow -----
-nextflow run HPCBio-Refgraph_pipeline/assemble.nf \
--c HPCBio-Refgraph_pipeline/assembly-config.conf \
+nextflow run HPCBio-Refgraph_pipeline/assembly/assemble.nf \
+-c HPCBio-Refgraph_pipeline/assembly/main.conf \
 -qs 1 -resume \
 -with-report nextflow_reports/assembly_nf_report.html \
 -with-timeline nextflow_reports/assembly_nf_timeline.html \
