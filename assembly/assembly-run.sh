@@ -21,7 +21,7 @@ cd /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021
 module load nextflow/21.04.1-Java-1.8.0_152
 
 # Run nextflow UIUC workflow -----
-nextflow run HPCBio-Refgraph_pipeline/assembly/assemble.nf \
+nextflow run HPCBio-Refgraph_pipeline/assembly/assemble_bowtie_start.nf \
 -c HPCBio-Refgraph_pipeline/assembly/main.conf \
 -qs 1 -resume \
 -with-report nextflow_reports/assembly_nf_report.html \
