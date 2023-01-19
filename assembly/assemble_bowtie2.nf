@@ -3,7 +3,7 @@
 /*parameters that are specified at the command line or via config file*/
 params.genome                = false          /*genome fasta file, must specify complete path. Required parameters*/
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
-params.outputDir             = "./results"    /*output folder, must specify complete path. Required parameters*/
+params.outputDir             = "./results/bowtie2"    /*output folder, must specify complete path. Required parameters*/
 params.assembler             = 'masurca'      /*options: megahit|masurca. Default is megahit*/
 params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
 

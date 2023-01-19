@@ -18,8 +18,8 @@ params.taxdbPath              = false          /*location of blast taxa database
 params.skipcdhit              = false          /* If set to true in config file, cdhit would not be run. */
 
 /*Parameters to be used inside the pipeline */
-params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
-params.assembler              = 'megahit'      /*options: megahit|masurca. Default is masurca*/
+params.outputDir              = "./results/bowtie2"    /*output folder, must specify path from current directory. Required parameter*/
+params.assembler              = 'masurca'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for seqkit */
 params.min_read_length        = '500'          /*minimum length of read to be kept after trimming with seqkit for downstream analysis. Default is 500*/
@@ -84,7 +84,7 @@ process blastdbGRCh38 {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "BLAST+/2.10.1-IGB-gcc-8.2.0"
+    module                 "BLAST+/2.13.0-IGB-gcc-8.2.0"
     storeDir               genomeStore1
      
     input:
@@ -111,7 +111,7 @@ process blastdbGRCh38p0 {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "BLAST+/2.10.1-IGB-gcc-8.2.0"
+    module                 "BLAST+/2.13.0-IGB-gcc-8.2.0"
     storeDir               genomeStore2
     
     input:
@@ -137,7 +137,7 @@ process blastdbCHM13 {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "BLAST+/2.10.1-IGB-gcc-8.2.0"
+    module                 "BLAST+/2.13.0-IGB-gcc-8.2.0"
     storeDir               genomeStore3
     
     input:
@@ -274,7 +274,7 @@ process blastcontam {
     cpus                   defaultCPU
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
-    module                 "BLAST+/2.10.1-IGB-gcc-8.2.0","ncbi-blastdb/20201212","seqkit/0.12.1"              
+    module                 "BLAST+/2.13.0-IGB-gcc-8.2.0","ncbi-blastdb/20220318","seqkit/0.12.1"              
     publishDir             "${resultsPath}/BLAST_Contam/${params.assembler}/",mode:"copy",overwrite: true
 
 

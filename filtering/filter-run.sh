@@ -7,6 +7,7 @@
 #SBATCH -n 2
 #SBATCH -N 1
 #SBATCH -A h3abionet
+#SBATCH -p hpcbioamd,hpcbio
 #SBATCH -o /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021/slurm_output/slurm-%A.out
 
 ### This Runs Nextflow Filtering UIUC pipeline 
@@ -20,8 +21,8 @@ cd /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021
 module load nextflow/21.04.1-Java-1.8.0_152
 
 # Run nextflow UIUC workflow -----
-nextflow run HPCBio-Refgraph_pipeline/filter.nf \
--c HPCBio-Refgraph_pipeline/filter-config.conf \
+nextflow run HPCBio-Refgraph_pipeline/filtering/filter.nf \
+-c HPCBio-Refgraph_pipeline/filtering/main.conf \
 -qs 3 -resume \
 -with-report nextflow_reports/filter_nf_report.html \
 -with-timeline nextflow_reports/filter_nf_timeline.html \
