@@ -15,7 +15,7 @@ params.samplePath3            = false          /*input fasta files path for CHM1
 params.skipRepeatMasker       = false          /* If set to true in config file, RepeatMasker would not be run. */
 
 /*Parameters to be used inside the pipeline */
-params.outputDir              = "./results"    /*output folder, must specify path from current directory. Required parameter*/
+params.outputDir              = "./results/bowtie2"    /*output folder, must specify path from current directory. Required parameter*/
 params.assembler              = 'megahit'      /*options: megahit|masurca. Default is masurca*/
 
 /*Parameters for cdhit */
