@@ -13,17 +13,20 @@ params.genome                = false
 // params.stdevInsSize          = 100
 
 /* parameters for readprep = qctrimming and adapter removal */
-params.skipTrim              = false           /*qc-trimming of reads. options: true|false. Default is false*/
-params.min_read_length       = '20'            /*minimum length of read to be kept after trimming for downstream analysis. Default is 20*/
-params.min_base_quality      = '10'            /*minimum base quality. Default is 20*/
-params.guess_adapter         = true            /*auto-detect adapter from input file. options: true|false. Default is true*/
+params.skipTrim              = false           /* qc-trimming of reads. options: true|false. Default is false */
+// params.min_read_length       = '20'            /* minimum length of read to be kept after trimming for downstream analysis. Default is 20 */
+// params.min_base_quality      = '20'            /* minimum base quality. Default is 20 */
+params.guess_adapter         = true            /* auto-detect adapter from input file. options: true|false. Default is true */
+
+/* parameters for clipping extraction. */
+params.clipping              = 'all'           /* extract from full alignment ('all'), or from the improper paired ('discordant') alignment Default = 'all'*/
 
 /* Experimental */
-params.tmpdir               = '/scratch'       /*primarily for setting up a defined tmp/scratch space for samtools collate*/
+params.tmpdir               = '/scratch'       /* primarily for setting up a defined tmp/scratch space for samtools collate */
 
 /* Not yet implemented */
-params.forward_adapter       = false           /*adapter sequence to be clipped off (forward). */
-params.reverse_adapter       = false           /*adapter sequence to be clipped off (reverse). Used for paired reads only*.*/
+params.forward_adapter       = false           /* adapter sequence to be clipped off (forward).  */
+params.reverse_adapter       = false           /* adapter sequence to be clipped off (reverse). Used for paired reads only*. */
 
 /*Stage*/
 stage = "read-extraction"
@@ -47,7 +50,7 @@ genome_store                 = params.genome ? genome_file.getParent() : ''
 Channel.fromFilePairs("${params.samplePath}", size: 1)
     .into { Aln_QC; Aln_Stats; Aln_Improper; Aln_Clipped }
 
-// TODO: add general sanity checks on required data and formats
+// TODO: add general sanity checks on parameter checks, required data, and formats
 
 // Check format to make sure it's 'bam' or 'cram'
 // Check that a reference is provided if the format is 'cram'
@@ -56,7 +59,7 @@ if (params.reference) {
     // needed for CRAM, see sanity checks
     if( !reference_file.exists() ) exit 1, "Missing reference genome file: ${reference_file}"
 
-    process prepare_reference {
+    process SAMTOOLS_INDEX_REFERENCE {
         container              "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
         tag                    { "PREP_REFERENCE" }
         cpus                   defaultCPU
@@ -154,32 +157,31 @@ process CHECK_INPUT {
     """
 }
 
-process ALIGNMENT_STATS {
-    // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
-    container              "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
-    tag                    { "ALN_STATS:${id}" }
-    cpus                   defaultCPU
-    memory                 "$defaultMemory GB"
-    errorStrategy          { task.exitStatus=1 ? 'ignore' : 'terminate' }
+// process ALIGNMENT_STATS {
+//     // singularity run https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0
+//     container              "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+//     tag                    { "ALN_STATS:${id}" }
+//     cpus                   defaultCPU
+//     memory                 "$defaultMemory GB"
+//     publishDir             "${resultsPath}/Stats",mode:"copy", overwrite: true    
     
-    input:
-    tuple val(id), file(aln), val(status) from Aln_Stats.join(Aln_QC_Check_Stats)
+//     input:
+//     tuple val(id), file(aln), val(status) from Aln_Stats.join(Aln_QC_Check_Stats)
 
-    output:
-    file("${id}.original.stats")
-    file("${id}.original,idxstat")
-    file("${id}.original.flagstat")
+//     output:
+//     file("${id}.original.stats")
+//     file("${id}.original.flagstat")
 
-    script:
-    ref = params.genome ? "--reference ${genome_file}" : ""
+//     script:
+//     ref = params.genome ? "--reference ${genome_file}" : ""
 
-    """
-    samtools stats -@ ${task.cpus} ${aln} > ${id}.original.stats
-    # TODO: check for the presence of an index file
-    # samtools idxstat -@ ${task.cpus} ${aln} > ${id}.original.idxstat
-    samtools flagstat -@ ${task.cpus} ${aln} > ${id}.original.flagstat
-    """
-}
+//     """
+//     samtools stats -@ ${task.cpus} ${aln} > ${id}.original.stats
+//     # TODO: check for the presence of an index file
+//     # samtools idxstat -@ ${task.cpus} ${aln} > ${id}.original.idxstat
+//     samtools flagstat -@ ${task.cpus} ${aln} > ${id}.original.flagstat
+//     """
+// }
 
 /*
    Read extraction.  This step is tricky.
@@ -524,6 +526,7 @@ process FASTQC_POST {
     publishDir             "${resultsPath}/FASTQC-Posttrim",mode:"copy", overwrite: true
 
     input:
+    // TODO: remove sereads, not used here
     tuple val(id), file(pereads), file(sereads) from trim_fastqc
 
     output:
@@ -535,26 +538,26 @@ process FASTQC_POST {
     """
 }
 
-process MULTIQC {
-    // singularity run https://depot.galaxyproject.org/singularity/multiqc:1.12--pyhdfd78af_0
-    container              "https://depot.galaxyproject.org/singularity/multiqc:1.12--pyhdfd78af_0"
-    cpus                   2
-    memory                 "$defaultMemory GB"
-    // module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
-    publishDir             "${resultsPath}/MultiQC",mode:"copy",overwrite: true
+// process MULTIQC {
+//     // singularity run https://depot.galaxyproject.org/singularity/multiqc:1.12--pyhdfd78af_0
+//     container              "https://depot.galaxyproject.org/singularity/multiqc:1.12--pyhdfd78af_0"
+//     cpus                   2
+//     memory                 "$defaultMemory GB"
+//     // module                 "MultiQC/1.11-IGB-gcc-8.2.0-Python-3.7.2"
+//     publishDir             "${resultsPath}/MultiQC",mode:"copy",overwrite: true
  
-    input:
-    file('./FASTQC-Pretrim/*') from fastqc_results.collect().ifEmpty([])
-    file('./FASTQC-Posttrim/*') from fastqc_trimmed_results.collect().ifEmpty([])
-    file('./FASTP/*') from trim_multiqc_ch.collect().ifEmpty([])
+//     input:
+//     file('./FASTQC-Pretrim/*') from fastqc_results.collect().ifEmpty([])
+//     file('./FASTQC-Posttrim/*') from fastqc_trimmed_results.collect().ifEmpty([])
+//     file('./FASTP/*') from trim_multiqc_ch.collect().ifEmpty([])
 
-    output:
-    file "multiqc*"
+//     output:
+//     file "multiqc*"
 
-    """
-    multiqc .
-    """
-} 
+//     """
+//     multiqc .
+//     """
+// } 
 
 if (params.genome) {
 
