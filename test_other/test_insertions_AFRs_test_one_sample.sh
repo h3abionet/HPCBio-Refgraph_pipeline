@@ -46,7 +46,7 @@ echo "Sequence files from various RefGraph pipeline steps are merging"
 
 # Final assembly -----
 rm ${alignment}/pipeline_testing/merged_AFR/${assembly}/1.Final_Assembly_All_AFR_${assembly}.fasta # you can add -f to get rid of error about file not existing.
-cat ${alignment}/assembly/Final-Assembly/${assembly}/AFR/*.${assembly}.final.fasta \
+cat ${alignment}/assembly/Final-Assembly/${assembly}/*.${assembly}.final.fasta \
 >> ${alignment}/pipeline_testing/merged_AFR/${assembly}/1.Final_Assembly_All_AFR_${assembly}.fasta
 
 # Filted to >500 length sequence by seqkit -----
@@ -253,7 +253,7 @@ count ()
 echo "count process started"
 
 # Remove if the file exists -----
-rm ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences*.tsv
+#rm ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences*.tsv
 mkdir -p ${alignment}/pipeline_testing/Count/${assembly}/
 
 # Get number of reads from seqkit results -----
@@ -290,8 +290,8 @@ echo -e "seqid,pident100_insertions,pident100_qcovs100_insertions" \
 for i in ${alignment}/pipeline_testing/BLAST/${assembly}/*blast_ref.tsv
 do 
 echo $(basename ${i}) >> ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.00.tsv
-awk -F"\t" '($4 == 100)' ${i} | cut -f1 | uniq | wc -l >> pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.11.tsv
-awk -F"\t" '($4 == 100 && $7 == 100)' ${i} | cut -f1 | uniq | wc -l >> pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.22.tsv
+awk -F"\t" '($4 == 100)' ${i} | cut -f1 | uniq | wc -l >> ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.11.tsv
+awk -F"\t" '($4 == 100 && $7 == 100)' ${i} | cut -f1 | uniq | wc -l >>  ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.22.tsv
 done 
 
 paste ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.00.tsv \
@@ -329,17 +329,18 @@ ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs
 > ${alignment}/pipeline_testing/Count/${assembly}/Final_stats_${assembly}.tsv
 
 # Remove extra files and view final file -----
-rm ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.0.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.1.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.2.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.00.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.11.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.22.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_compare0.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_ref0.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_qstats0.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_ref_merge.tsv \
-${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_compare_merge.tsv 
+rm ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences*.tsv
+# rm ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.0.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.1.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.2.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.00.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.11.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.22.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_compare0.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_ref0.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_qstats0.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_ref_merge.tsv \
+# ${alignment}/pipeline_testing/Count/${assembly}/shared_sequences_pident100_qcovs100.blast_compare_merge.tsv 
 
 echo "Created a table with pident=100 and qcovs=100 and number of sequences from seqkit"
 }
@@ -362,9 +363,9 @@ main ()
   echo ""
 	echo "*** RUNNING ${runtype} BLAST COMPARE PIPELINE ***"
   
-quast
-blast_test
-blast_ref
+#quast
+#blast_test
+#blast_ref
 count
 
 }

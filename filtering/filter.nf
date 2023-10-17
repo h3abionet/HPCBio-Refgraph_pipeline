@@ -48,7 +48,7 @@ resultsPath = "${params.outputDir}/${stage}"
 /*Cluster parameters */
 myExecutor                   = 'slurm'
 params.myQueue               = 'hpcbio'
-defaultCPU                   = '9'
+defaultCPU                   = '24'
 defaultMemory                = '120'
 params.clusterAcct           = " -A h3bionet "
 

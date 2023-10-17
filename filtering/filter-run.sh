@@ -7,7 +7,7 @@
 #SBATCH -n 2
 #SBATCH -N 1
 #SBATCH -A h3abionet
-#SBATCH -p hpcbioamd,hpcbio
+#SBATCH -p hpcbio
 #SBATCH -o /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021/slurm_output/slurm-%A.out
 
 ### This Runs Nextflow Filtering UIUC pipeline 

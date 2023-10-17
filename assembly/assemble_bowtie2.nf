@@ -4,7 +4,7 @@
 params.genome                = false          /*genome fasta file, must specify complete path. Required parameters*/
 params.samplePath            = false          /*input folder, must specify complete path. Required parameters*/
 params.outputDir             = "./results/bowtie2"    /*output folder, must specify complete path. Required parameters*/
-params.assembler             = 'masurca'      /*options: megahit|masurca. Default is megahit*/
+params.assembler             = 'megahit'      /*options: megahit|masurca. Default is megahit*/
 params.skipKraken2           = true           /*options: true|false. Default is true which means that kraken2 will be skipped*/
 
 /* alignment stats */
@@ -45,9 +45,9 @@ resultsPath = "${params.outputDir}/${stage}"
 /*cluster parameters */
 myExecutor                   = 'slurm'
 params.myQueue               = 'hpcbio'
-defaultCPU                   = '1'
-defaultMemory                = '20'
-assemblerCPU                 = '12'
+defaultCPU                   = '24'
+defaultMemory                = '50'
+assemblerCPU                 = '24'
 assemblerMemory              = '100'
 params.clusterAcct           = " -A h3bionet "
 
@@ -185,14 +185,31 @@ process convert_cram_fastq {
 
     output:
     tuple val(id), file("${id}.cramconverted.R{1,2}.fastq.gz") into cram_converted_fastq
-    
+
+  /*
+    mkdir -p tmp/
+
+    samtools collate \
+    -@ ${task.cpus} \
+    --reference ${genome} \
+    --output-fmt CRAM \
+    -O ${CRAM2} > ${collate_cram} \
+    -T tmp/${id}.tmp.fq.gz
+ */
+
+
     script:
     """
-     samtools fastq -@ ${task.cpus} \
-     --reference ${genome} \
+    tmpdir=\$( mktemp -d collate.XXXXXXXXX )
+
+    samtools collate \
+    -@ ${task.cpus} \
+    --reference ${genome} \
+    -O ${CRAM2} \$tmpdir/${id} | \
+    samtools fastq -F 2304 \
      -1 ${id}.cramconverted.R1.fastq.gz \
-     -2 ${id}.cramconverted.R2.fastq.gz \
-     ${CRAM2} 
+     -2 ${id}.cramconverted.R2.fastq.gz
+
     """
 
 }
@@ -223,7 +240,7 @@ process bowtie_index {
 process align_bowtie {
     tag                      { id }
     executor               myExecutor
-    cpus                   6
+    cpus                   24
     queue                  params.myQueue
     memory                 "$defaultMemory GB"
     module                 "SAMtools/1.12-IGB-gcc-8.2.0","Bowtie2/2.4.2-IGB-gcc-8.2.0"

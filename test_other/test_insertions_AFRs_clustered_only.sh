@@ -7,12 +7,16 @@
 #SBATCH -n 8
 #SBATCH -N 1
 #SBATCH -A h3abionet
+#SBATCH -p hpcbio
 #SBATCH -o /home/groups/h3abionet/RefGraph/results/NeginV_Test_Summer2021/slurm_output/slurm-%j.out
 
 # -n 8 #core, cpu, thread, or processor
 #-N 1 #node or computer
 
 ### HPCBio: This merges AFR files at each step of pipeline and give blast and seqkit stats; 
+### This is specificly only for running the clustered files only. I needed to only do these at some point. 
+### Normally, the other one that says test_insertions_AFR.sh is the one to use.
+
 # Created by Negin Valizadegan aPRIL 27, 2022; valizad2@illinois.edu
 
 
